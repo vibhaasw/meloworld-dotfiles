@@ -110,16 +110,32 @@ alias packages='pacman -Qe'
 
 function orphans() {
   local pkgs
-  pkgs=$(pacman -Qdtq)
-  if [[ -n $pkgs ]]; then
-    sudo pacman -Rs $pkgs
-  else
+  pkgs=(${(f)"$(pacman -Qdtq)"})
+  if (( ${#pkgs[@]} == 0 )); then
     echo "no orphans to remove"
+    return 0
+  fi
+  echo "orphaned packages:"
+  printf '  %s\n' "${pkgs[@]}"
+  echo ""
+  read -q "REPLY?remove ${#pkgs[@]} package(s)? [y/N] "
+  echo ""
+  if [[ $REPLY == "y" ]]; then
+    sudo pacman -Rs "${pkgs[@]}"
+  else
+    echo "aborted"
   fi
 }
 
 # Full system update
-alias update='paru && rustup update && orphans && flatpak update && flatpak uninstall --unused && flatpak repair'
+function update() {
+  paru
+  command -v rustup &>/dev/null && rustup update
+  orphans
+  flatpak update
+  flatpak uninstall --unused
+  flatpak repair
+}
 
 # idle
 alias sleepy='quickshell -c ~/.config/quickshell/idle-overlay'
