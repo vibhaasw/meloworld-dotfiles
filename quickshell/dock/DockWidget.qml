@@ -29,7 +29,8 @@ PanelWindow {
     // ── state ──────────────────────────────────────────────────────
     property bool windowsPresent: false
     property bool hovering:       false
-    readonly property bool dockVisible: !windowsPresent || hovering
+    property bool anyMenuOpen:    false   // set by AppIcon; keeps dock visible during popup
+    readonly property bool dockVisible: !windowsPresent || hovering || anyMenuOpen
 
     // ── hide debounce ──────────────────────────────────────────────
     Timer {
@@ -83,9 +84,6 @@ PanelWindow {
     Item {
         id: pill
 
-        // No anchors — position is managed entirely by y so that layout
-        // geometry always matches visual position, letting the mask track
-        // pill directly without a shadow item.
         x: (parent.width - width) / 2
         width:  row.implicitWidth + dock.margin * 2
         height: dock.pillHeight
@@ -95,10 +93,7 @@ PanelWindow {
         y: dock.dockVisible ? restingY : hiddenY
 
         Behavior on y {
-            NumberAnimation {
-                duration: 260
-                easing.type: Easing.OutCubic
-            }
+            NumberAnimation { duration: 260; easing.type: Easing.OutCubic }
         }
 
         opacity: dock.dockVisible ? 1.0 : 0.0
@@ -125,10 +120,11 @@ PanelWindow {
             Repeater {
                 model: PinnedApps.apps
                 AppIcon {
-                    appId:         modelData.id
-                    appLabel:      modelData.label
-                    iconName:      modelData.icon
-                    steamId:       modelData.steamId ?? ""
+                    appId:    modelData.id
+                    appLabel: modelData.label
+                    iconName: modelData.icon
+                    steamId:  modelData.steamId  ?? ""
+                    execName: modelData.execName ?? ""
                 }
             }
         }
