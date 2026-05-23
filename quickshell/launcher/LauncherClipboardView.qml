@@ -412,7 +412,7 @@ Item {
 
                     Text {
                         anchors.centerIn: parent
-                        text:             "✕"
+                        text:             ""
                         font.pixelSize:   12
                         font.bold:        true
                         font.family:      "JetBrainsMono Nerd Font"

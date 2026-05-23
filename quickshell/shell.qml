@@ -8,6 +8,7 @@ import "osd"
 import "dashboard"
 import "dock"
 import "launcher"
+import "screenshot"
 
 ShellRoot {
     Variants {
@@ -96,7 +97,6 @@ ShellRoot {
         }
     }
     PolkitDialog {}
-
-    // ── App launcher (one global window, shown on the primary screen) ──────
     AppLauncher {}
+    ScreenshotUI {}
 }
