@@ -24,5 +24,6 @@ Singleton {
         BrightnessState.hide()
         TrayState.hide()
         CalendarState.hide()
+        LauncherState.hide()
     }
 }
