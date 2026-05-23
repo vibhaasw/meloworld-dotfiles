@@ -1,3 +1,4 @@
-module launcher
-
+module Launcher
+singleton LauncherHiddenApps 1.0 LauncherHiddenApps.qml
 AppLauncher 1.0 AppLauncher.qml
+AppLauncherIcon 1.0 AppLauncherIcon.qml

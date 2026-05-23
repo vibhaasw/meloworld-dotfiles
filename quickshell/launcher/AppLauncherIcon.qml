@@ -3,26 +3,42 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Widgets
 import "../theme"
+import "../dock"
 
 Item {
     id: root
 
-    property string appId:    ""
-    property string appLabel: ""
-    property string iconName: ""
-    property string steamId:  ""
-    property string execName: ""
+    // ── Set by Repeater in AppLauncher ────────────────────────────────────
+    property string appId:   ""
+    property string appName: ""
+    property string appIcon: ""
+    property var    appData: null   // DesktopEntry object
 
-    // Detected from the app's .desktop file:
-    //   true  → app prefers dGPU (non-default) → alt option is iGPU (default)
-    //   false → app uses iGPU (default)         → alt option is dGPU (non-default)
+    // ── Grid position — set by AppLauncher.updateFilter() ────────────────
+    property bool isMatch:       true
+    property int  filteredIndex: 0
+
+    // ── Passed down from AppLauncher ──────────────────────────────────────
+    property int  launcherItemsPerPage: 15
+    property int  launcherCurrentPage:  0
+    property int  launcherSelectedIdx:  -1
+    property int  delegateIndex:        0   // Repeater index
+
+    property int pageNumber:  filteredIndex < 0 ? -1 : Math.floor(filteredIndex / launcherItemsPerPage)
+    property int indexOnPage: filteredIndex < 0 ?  0 : filteredIndex % launcherItemsPerPage
+    property int gridCol:     indexOnPage % 5
+    property int gridRow:     Math.floor(indexOnPage / 5)
+
+    visible: isMatch && pageNumber === launcherCurrentPage
+
+    x: gridCol * 116 + 4
+    y: gridRow * 116 + 4
+    width:  108
+    height: 104
+
+    // ── GPU preference (mirrors dock AppIcon logic exactly) ───────────────
     property bool appPrefersNonDefault: false
 
-    implicitWidth:  56
-    implicitHeight: 64
-
-    // ── Read .desktop file to detect GPU preference ────────────────
-    // Tries ~/.local/share/applications/ first, falls back to /usr/share/applications/.
     Process {
         id: desktopReader
         command: ["bash", "-c",
@@ -40,164 +56,141 @@ Item {
         var lines = text.split("\n")
         for (var i = 0; i < lines.length; i++) {
             var line = lines[i].trim()
-
-            // Standard freedesktop key
             var prefMatch = line.match(/^PrefersNonDefaultGPU\s*=\s*(.+)$/)
             if (prefMatch) {
-                var val = prefMatch[1].trim()
-                if (val === "true" || val === "1")
+                if (prefMatch[1].trim() === "true" || prefMatch[1].trim() === "1")
                     root.appPrefersNonDefault = true
                 continue
             }
-
-            // Custom: Exec line already uses switcherooctl (user-configured)
             var execMatch = line.match(/^Exec\s*=\s*(.+)$/)
             if (execMatch && execMatch[1].includes("switcherooctl"))
                 root.appPrefersNonDefault = true
         }
     }
 
-    HoverHandler { id: hover }
+    // ── Build menu model (exact same logic as dock AppIcon) ───────────────
+    function _buildMenuModel() {
+        var pinned  = PinnedApps.isPinned(root.appId)
+        var entries = [{ label: "Launch", action: "launch", gpuIndex: -1 }]
 
-    // ── Hover background ───────────────────────────────────────────
-    Rectangle {
-        anchors.centerIn: parent
-        width:  48
-        height: 48
-        radius: 10
-        color:  hover.hovered ? Qt.rgba(1, 1, 1, 0.08) : "transparent"
-        Behavior on color { ColorAnimation { duration: 150 } }
-    }
-
-    // ── App icon ───────────────────────────────────────────────────
-    IconImage {
-        id: icon
-        anchors.centerIn: parent
-        implicitSize: 40
-        source: Quickshell.iconPath(root.iconName)
-
-        scale: hover.hovered ? 1.1 : 1.0
-        Behavior on scale {
-            NumberAnimation { duration: 120; easing.type: Easing.OutCubic }
+        if (DockState.gpuInfoReady) {
+            if (root.appPrefersNonDefault) {
+                if (DockState.defaultGpuName !== "")
+                    entries.push({ label: "Launch with " + DockState.defaultGpuName,
+                                   action: "gpu", gpuIndex: DockState.defaultGpuIndex })
+            } else {
+                if (DockState.nonDefaultGpuName !== "")
+                    entries.push({ label: "Launch with " + DockState.nonDefaultGpuName,
+                                   action: "gpu", gpuIndex: DockState.nonDefaultGpuIndex })
+            }
         }
+
+        entries.push({
+            label:    pinned ? "Unpin from dock" : "Pin to dock",
+            action:   pinned ? "unpin" : "pin",
+            gpuIndex: -1
+        })
+        entries.push({ label: "Hide", action: "hide", gpuIndex: -1 })
+
+        return entries
     }
 
-    // ── Auto-dismiss: 3 s idle ─────────────────────────────────────
+    // ── Launch helpers ────────────────────────────────────────────────────
+    function _launchDefault() {
+        if (root.appData) root.appData.execute()
+        else Quickshell.execDetached([root.appId])
+        LauncherState.hide()
+    }
+
+    function _launchOnGpu(gpuIndex) {
+        Quickshell.execDetached(["switcherooctl", "launch", "-g", String(gpuIndex), root.appId])
+        LauncherState.hide()
+    }
+
+    // Called by AppLauncher on Enter key
+    function executeApp() { _launchDefault() }
+
+    // ── Dismiss timer ─────────────────────────────────────────────────────
     Timer {
         id: dismissTimer
         interval: 3000
         running:  ctxMenu.isOpen
-        onTriggered: {
-            ctxMenu.closeMenu()
-            DockState.close()
-        }
+        onTriggered: ctxMenu.closeMenu()
     }
 
     Connections {
-        target: dock
-        function onDockVisibleChanged() {
-            if (!dock.dockVisible && ctxMenu.isOpen) {
+        target: LauncherState
+        function onVisibleChanged() {
+            if (!LauncherState.visible && ctxMenu.isOpen)
                 ctxMenu.closeMenu()
-                DockState.close()
+        }
+    }
+
+    // ── Visuals ───────────────────────────────────────────────────────────
+    HoverHandler { id: hover }
+
+    Rectangle {
+        anchors.fill: parent
+        radius:       12
+        color: (root.launcherSelectedIdx === root.delegateIndex || hover.hovered)
+                   ? Qt.rgba(1, 1, 1, 0.08)
+                   : "transparent"
+        Behavior on color { ColorAnimation { duration: 150 } }
+    }
+
+    Column {
+        anchors.centerIn: parent
+        spacing: 8
+
+        IconImage {
+            id: iconImg
+            anchors.horizontalCenter: parent.horizontalCenter
+            implicitSize: 48
+            source: Quickshell.iconPath(root.appIcon)
+
+            scale: (root.launcherSelectedIdx === root.delegateIndex || hover.hovered) ? 1.1 : 1.0
+            Behavior on scale {
+                NumberAnimation { duration: 120; easing.type: Easing.OutCubic }
             }
         }
-    }
 
-    Connections {
-        target: DockState
-        function onCloseAll() {
-            if (ctxMenu.isOpen)
-                ctxMenu.closeMenu()
+        Text {
+            anchors.horizontalCenter: parent.horizontalCenter
+            text:                root.appName
+            font.pixelSize:      12
+            font.bold:           true
+            font.family:         "JetBrainsMono Nerd Font"
+            color:               PanelColors.textMain
+            width:               100
+            horizontalAlignment: Text.AlignHCenter
+            elide:               Text.ElideRight
         }
     }
 
-    // ── Mouse ──────────────────────────────────────────────────────
+    // ── Mouse ─────────────────────────────────────────────────────────────
     MouseArea {
         anchors.fill:    parent
+        z:               1
         cursorShape:     Qt.PointingHandCursor
         acceptedButtons: Qt.LeftButton | Qt.RightButton
 
+        onEntered: root.launcherSelectedIdx = root.delegateIndex
+
         onClicked: (mouse) => {
             if (mouse.button === Qt.RightButton) {
-                if (ctxMenu.isOpen) {
-                    ctxMenu.closeMenu()
-                    DockState.close()
-                } else {
-                    DockState.openFor(root)
-                    ctxMenu.openMenu()
-                }
+                if (ctxMenu.isOpen) ctxMenu.closeMenu()
+                else                ctxMenu.openMenu()
             } else {
                 root._launchDefault()
             }
         }
     }
 
-    // ── Launch helpers ─────────────────────────────────────────────
-    function _launchDefault() {
-    if (root.steamId !== "") {
-        Quickshell.execDetached(["xdg-open", "steam://rungameid/" + root.steamId])
-    } else if (root.appPrefersNonDefault) {
-        // App wants dGPU — launch via switcherooctl directly
-        var bin = root.execName !== "" ? root.execName : root.appId
-        Quickshell.execDetached([
-            "/usr/bin/switcherooctl", "launch", "--gpu", "1", bin
-        ])
-    } else {
-        var entry = DesktopEntries.byId(root.appId)
-        if (entry) entry.execute()
-        else Quickshell.execDetached([root.appId])
-    }
-}
-
-    function _launchOnGpu(gpuIndex) {
-        var base = ["switcherooctl", "launch", "-g", String(gpuIndex)]
-        var argv
-        if (root.steamId !== "") {
-            argv = base.concat(["steam", "-applaunch", root.steamId])
-        } else {
-            var bin = root.execName !== "" ? root.execName : root.appId
-            argv = base.concat([bin])
-        }
-        Quickshell.execDetached(argv)
-    }
-
-    // Returns [{label, gpuIndex}] where gpuIndex -1 means default launch.
-    // The alt entry targets whichever GPU the app does NOT already prefer.
-
-    function _buildMenuModel() {
-        var entries = [{ label: "Launch", gpuIndex: -1, action: "launch" }]
-
-        if (root.steamId !== "") {
-            entries.push({ label: "Unpin from dock", gpuIndex: -1, action: "unpin" })
-            return entries
-        }
-
-        if (DockState.gpuInfoReady) {
-            if (root.appPrefersNonDefault) {
-                if (DockState.defaultGpuName !== "")
-                    entries.push({ label: "Launch with " + DockState.defaultGpuName,
-                                   gpuIndex: DockState.defaultGpuIndex, action: "gpu" })
-            } else {
-                if (DockState.nonDefaultGpuName !== "")
-                    entries.push({ label: "Launch with " + DockState.nonDefaultGpuName,
-                                   gpuIndex: DockState.nonDefaultGpuIndex, action: "gpu" })
-            }
-        }
-
-        var pinned = PinnedApps.isPinned(root.appId)
-        entries.push({
-            label:    pinned ? "Unpin from dock" : "Pin to dock",
-            gpuIndex: -1,
-            action:   pinned ? "unpin" : "pin"
-        })
-        return entries
-    }
-
-    // ── Context menu popup ─────────────────────────────────────────
+    // ── Context menu PopupWindow (exact dock pattern) ─────────────────────
     PopupWindow {
         id: ctxMenu
 
-        anchor.item:           icon
+        anchor.item:           iconImg
         anchor.edges:          Edges.Top
         anchor.gravity:        Edges.Top
         anchor.margins.bottom: 8
@@ -215,8 +208,6 @@ Item {
             innerRect.opacity  = 0.0
             visible            = true
             isOpen             = true
-            dock.anyMenuOpen   = true
-            dock.hovering      = true
             openAnim.restart()
             dismissTimer.restart()
         }
@@ -254,12 +245,7 @@ Item {
                     to: 0.0; duration: 130; easing.type: Easing.InCubic
                 }
             }
-            ScriptAction {
-                script: {
-                    ctxMenu.visible  = false
-                    dock.anyMenuOpen = false
-                }
-            }
+            ScriptAction { script: ctxMenu.visible = false }
         }
 
         mask: Region { item: innerRect }
@@ -282,9 +268,7 @@ Item {
             Behavior on border.color { ColorAnimation { duration: PanelColors.transitionDuration } }
 
             HoverHandler {
-                onHoveredChanged: {
-                    if (hovered) dismissTimer.restart()
-                }
+                onHoveredChanged: { if (hovered) dismissTimer.restart() }
             }
 
             Column {
@@ -299,12 +283,13 @@ Item {
 
                 Text {
                     width:          parent.width
-                    text:           root.appLabel
+                    text:           root.appName
                     font.pixelSize: 12
                     font.bold:      true
                     font.family:    "JetBrainsMono Nerd Font"
                     color:          PanelColors.textDim
                     bottomPadding:  4
+                    elide:          Text.ElideRight
                 }
 
                 Rectangle {
@@ -360,22 +345,22 @@ Item {
                                 id: rowMouse
                                 anchors.fill: parent
                                 hoverEnabled: true
-
                                 onContainsMouseChanged: {
                                     if (containsMouse) dismissTimer.restart()
                                 }
-
                                 onClicked: {
                                     ctxMenu.closeMenu()
-                                    DockState.close()
-                                    if (modelData.action === "unpin") {
-                                        PinnedApps.unpinApp(root.appId)
-                                    } else if (modelData.action === "pin") {
-                                        PinnedApps.pinApp(root.appId, root.appLabel, root.iconName, root.execName, root.steamId)
-                                    } else if (modelData.gpuIndex === -1) {
+                                    var action = modelData.action
+                                    if (action === "launch") {
                                         root._launchDefault()
-                                    } else {
+                                    } else if (action === "gpu") {
                                         root._launchOnGpu(modelData.gpuIndex)
+                                    } else if (action === "pin") {
+                                        PinnedApps.pinApp(root.appId, root.appName, root.appIcon, "", "")
+                                    } else if (action === "unpin") {
+                                        PinnedApps.unpinApp(root.appId)
+                                    } else if (action === "hide") {
+                                        LauncherHiddenApps.hide(root.appId, root.appName, root.appIcon)
                                     }
                                 }
                             }

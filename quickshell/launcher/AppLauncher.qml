@@ -4,23 +4,11 @@ import Quickshell.Io
 import Quickshell.Wayland
 import Quickshell.Widgets
 import "../theme"
+import "../dock"
 
-// ── AppLauncher ───────────────────────────────────────────────────────────────
-// A floating, centered app launcher window.
-//
-// Architecture:
-//   • PanelWindow spans the full screen (Overlay layer, exclusiveZone 0).
-//   • A Region mask restricts pointer input to only the launcher panel, so
-//     clicks outside the panel pass straight through to the compositor.
-//   • The panel Rectangle is positioned slightly above centre (mirroring the
-//     COSMIC launcher aesthetic) and animates in with a slide-up + fade.
-//   • animState mirrors the pattern used in PopupBase ("closed"/"open"/"closing").
-//   • Super+A must be bound in the compositor — see the keybind comment below.
-//
 PanelWindow {
     id: root
 
-    // ── Layer-shell setup ────────────────────────────────────────────────────
     anchors.top:    true
     anchors.bottom: true
     anchors.left:   true
@@ -31,80 +19,279 @@ PanelWindow {
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
 
     color:   "transparent"
-    // Keep the window alive through the close animation so it can play fully.
     visible: animState !== "closed"
 
-    // Only the panel rect receives pointer events; clicks outside pass through.
     mask: Region { item: panel }
 
-    // ── Animation state machine ──────────────────────────────────────────────
-    // Follows the exact same "closed/open/closing" contract as PopupBase so the
-    // rest of the shell can treat this consistently.
-    property string animState: "closed"
-    
-    // Tracks the currently focused app index for keyboard navigation
-    property int selectedIndex: 0
+    // ── Panel animation state ─────────────────────────────────────────────
+    property string animState:     "closed"
+    property int    selectedIndex: 0
 
-    // Updates the selection to the first visible app when searching
-    function updateSelection() {
-        for (var i = 0; i < appsRepeater.count; i++) {
-            var item = appsRepeater.itemAt(i)
-            if (item && item.isMatch) {
-                selectedIndex = i
-                return
-            }
-        }
-        selectedIndex = -1
+    // ── Pagination ────────────────────────────────────────────────────────
+    property int totalPages:  1
+    property int currentPage: 0
+    readonly property int itemsPerPage: 15
+
+    // ── Hidden-apps popup (right-click empty space) ───────────────────────
+    property bool _hiddenMenuOpen: false
+
+    Timer {
+        id: hiddenDismissTimer
+        interval: 3000
+        running:  root._hiddenMenuOpen
+        onTriggered: root._closeHiddenMenu()
     }
 
+    function _openHiddenMenu() {
+        if (LauncherHiddenApps.hiddenApps.length === 0) return
+        if (_hiddenMenuOpen) { _closeHiddenMenu(); return }
+        _hiddenMenuOpen         = true
+        hiddenMenuInner.y       = 14
+        hiddenMenuInner.opacity = 0.0
+        hiddenMenuPopup.visible = true
+        hiddenOpenAnim.restart()
+        hiddenDismissTimer.restart()
+    }
+
+    function _closeHiddenMenu() {
+        if (!_hiddenMenuOpen) return
+        _hiddenMenuOpen = false
+        hiddenOpenAnim.stop()
+        hiddenCloseAnim.restart()
+    }
+
+    // ── Filter ────────────────────────────────────────────────────────────
+    Timer {
+        id: filterTimer
+        interval: 10
+        onTriggered: root.updateFilter()
+    }
+
+    function updateFilter() {
+        var visibleIdx = 0
+        var firstMatch = -1
+
+        for (var i = 0; i < appsRepeater.count; i++) {
+            var item = appsRepeater.itemAt(i)
+            if (!item) continue
+
+            var hidden    = LauncherHiddenApps.isHidden(item.appId)
+            var nameMatch = searchInput.text === "" ||
+                            item.appName.toLowerCase().includes(searchInput.text.toLowerCase())
+            var isMatch   = !hidden && nameMatch
+
+            item.isMatch = isMatch
+
+            if (isMatch) {
+                item.filteredIndex = visibleIdx
+                if (firstMatch === -1) firstMatch = i
+                visibleIdx++
+            } else {
+                item.filteredIndex = -1
+            }
+        }
+
+        root.totalPages = Math.max(1, Math.ceil(visibleIdx / root.itemsPerPage))
+        if (root.currentPage >= root.totalPages)
+            root.currentPage = Math.max(0, root.totalPages - 1)
+        root.selectedIndex = firstMatch
+    }
+
+    // ── Connections ───────────────────────────────────────────────────────
     Connections {
         target: LauncherState
         function onVisibleChanged() {
             root.animState = LauncherState.visible ? "open" : "closing"
-            
-            // Reset state when opening
             if (LauncherState.visible) {
                 searchInput.text = ""
-                appGrid.contentY = 0
-                root.selectedIndex = 0
+                root.currentPage = 0
+                root._closeHiddenMenu()
+                filterTimer.restart()
+            } else {
+                root._closeHiddenMenu()
             }
         }
     }
 
-    // Forward focus to the search field once the panel is fully in "open" state.
+    Connections {
+        target: LauncherHiddenApps
+        function onHiddenAppsChanged() { filterTimer.restart() }
+    }
+
     onAnimStateChanged: {
         if (animState === "open") searchInput.forceActiveFocus()
     }
 
-    // ── IPC Handler ──────────────────────────────────────────────────────────
+    // ── IPC ───────────────────────────────────────────────────────────────
     IpcHandler {
         target: "launcher"
-        function toggle(): void {
-            LauncherState.toggle()
+        function toggle(): void { LauncherState.toggle() }
+    }
+
+    // ── Hidden-apps PopupWindow ───────────────────────────────────────────
+    // Anchored to the panel top-center, same PopupWindow pattern as the dock.
+    PopupWindow {
+        id: hiddenMenuPopup
+
+        anchor.item:           panel
+        anchor.edges:          Edges.Top
+        anchor.gravity:        Edges.Top
+        anchor.margins.bottom: 8
+
+        color:          "transparent"
+        implicitWidth:  220
+        implicitHeight: hiddenMenuInner.implicitHeight
+
+        visible: false
+
+        SequentialAnimation {
+            id: hiddenOpenAnim
+            ParallelAnimation {
+                NumberAnimation {
+                    target: hiddenMenuInner; property: "y"
+                    to: 0; duration: 220; easing.type: Easing.OutExpo
+                }
+                NumberAnimation {
+                    target: hiddenMenuInner; property: "opacity"
+                    to: 1.0; duration: 170; easing.type: Easing.OutCubic
+                }
+            }
+        }
+
+        SequentialAnimation {
+            id: hiddenCloseAnim
+            ParallelAnimation {
+                NumberAnimation {
+                    target: hiddenMenuInner; property: "y"
+                    to: 14; duration: 160; easing.type: Easing.InCubic
+                }
+                NumberAnimation {
+                    target: hiddenMenuInner; property: "opacity"
+                    to: 0.0; duration: 130; easing.type: Easing.InCubic
+                }
+            }
+            ScriptAction { script: hiddenMenuPopup.visible = false }
+        }
+
+        mask: Region { item: hiddenMenuInner }
+
+        Rectangle {
+            id: hiddenMenuInner
+
+            width:          parent.width
+            implicitHeight: hiddenMenuCol.implicitHeight + padding * 2
+            height:         implicitHeight
+            radius:         10
+            color:          PanelColors.popupBackground
+            border.color:   PanelColors.border
+            border.width:   2
+            clip:           true
+
+            readonly property int padding: 12
+
+            Behavior on color        { ColorAnimation { duration: PanelColors.transitionDuration } }
+            Behavior on border.color { ColorAnimation { duration: PanelColors.transitionDuration } }
+
+            HoverHandler {
+                onHoveredChanged: { if (hovered) hiddenDismissTimer.restart() }
+            }
+
+            Column {
+                id: hiddenMenuCol
+                anchors {
+                    top:     parent.top
+                    left:    parent.left
+                    right:   parent.right
+                    margins: hiddenMenuInner.padding
+                }
+                spacing: 4
+
+                Text {
+                    width:          parent.width
+                    text:           "Hidden Apps"
+                    font.pixelSize: 12
+                    font.bold:      true
+                    font.family:    "JetBrainsMono Nerd Font"
+                    color:          PanelColors.textDim
+                    bottomPadding:  4
+                }
+
+                Rectangle {
+                    width:  parent.width
+                    height: 2
+                    color:  PanelColors.border
+                }
+
+                Repeater {
+                    model: LauncherHiddenApps.hiddenApps
+
+                    delegate: Item {
+                        required property var modelData
+                        width:  hiddenMenuCol.width
+                        height: 34
+
+                        Rectangle {
+                            anchors.fill: parent
+                            radius:       6
+                            color: hRow.containsMouse
+                                ? Qt.lighter(PanelColors.rowBackground, 1.15)
+                                : PanelColors.rowBackground
+                            Behavior on color { ColorAnimation { duration: 100 } }
+
+                            Rectangle {
+                                width: 3; height: parent.height - 10; radius: 2
+                                anchors {
+                                    left:           parent.left
+                                    leftMargin:     4
+                                    verticalCenter: parent.verticalCenter
+                                }
+                                color: PanelColors.textDim
+                            }
+
+                            Text {
+                                anchors {
+                                    left:           parent.left
+                                    leftMargin:     14
+                                    right:          parent.right
+                                    rightMargin:    10
+                                    verticalCenter: parent.verticalCenter
+                                }
+                                text:           modelData.name
+                                font.pixelSize: 13
+                                font.bold:      true
+                                font.family:    "JetBrainsMono Nerd Font"
+                                color:          PanelColors.textMain
+                                elide:          Text.ElideRight
+                            }
+
+                            MouseArea {
+                                id: hRow
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                onContainsMouseChanged: {
+                                    if (containsMouse) hiddenDismissTimer.restart()
+                                }
+                                onClicked: {
+                                    LauncherHiddenApps.show(modelData.id)
+                                    root._closeHiddenMenu()
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 
-    // ── Super+A keybind ──────────────────────────────────────────────────────
-    // Add the following to your compositor config to bind Super+A:
-    //
-    //   Miracle WM / Hyprland:
-    //     bind = SUPER, a, exec, qs ipc call launcher toggle
-    //
-    //   Niri (~/.config/niri/config.kdl):
-    //     binds { Mod+A { action spawn "sh" "-c" "qs ipc call launcher toggle" } }
-    //
-
-    // ── Panel ────────────────────────────────────────────────────────────────
+    // ── Panel ─────────────────────────────────────────────────────────────
     Rectangle {
         id: panel
 
-        // Design dimensions
         readonly property int panelWidth: 600
 
         width:  panelWidth
         height: panelColumn.implicitHeight + 20
 
-        // Perfectly centered
         x: Math.round((parent.width  - width)  / 2)
         y: Math.round((parent.height - height) / 2)
 
@@ -115,14 +302,16 @@ PanelWindow {
         border.color: PanelColors.border
         Behavior on border.color { ColorAnimation { duration: PanelColors.transitionDuration } }
         border.width: 4
+        clip:         false
 
-        clip: false
-
-        // ── Animation targets ────────────────────────────────────────────────
         opacity: 0.0
         transform: Translate { id: panelSlide; y: 28 }
 
-        // ── States ───────────────────────────────────────────────────────────
+        // ── Focus on hover ──────────────────────────────────────────────
+        HoverHandler {
+            onHoveredChanged: { if (hovered) panel.forceActiveFocus() }
+        }
+
         states: [
             State {
                 name: "open"
@@ -139,18 +328,15 @@ PanelWindow {
         ]
 
         transitions: [
-            // ── Slide up + fade in ───────────────────────────────────────────
             Transition {
                 to: "open"
                 SequentialAnimation {
-                    // Snap to the offset start position before beginning the
-                    // animation so reopening always plays from the same origin.
                     PropertyAction { target: panelSlide; property: "y";       value: 28  }
                     PropertyAction { target: panel;      property: "opacity"; value: 0.0 }
                     ParallelAnimation {
                         NumberAnimation {
                             target: panelSlide; property: "y"
-                            to: 0;   duration: 280; easing.type: Easing.OutExpo
+                            to: 0; duration: 280; easing.type: Easing.OutExpo
                         }
                         NumberAnimation {
                             target: panel; property: "opacity"
@@ -159,7 +345,6 @@ PanelWindow {
                     }
                 }
             },
-            // ── Slide down + fade out ────────────────────────────────────────
             Transition {
                 to: "closing"
                 SequentialAnimation {
@@ -173,13 +358,20 @@ PanelWindow {
                             to: 0.0; duration: 150; easing.type: Easing.InCubic
                         }
                     }
-                    // Flip the root window off once the animation finishes.
                     ScriptAction { script: root.animState = "closed" }
                 }
             }
         ]
 
-        // ── Content layout ───────────────────────────────────────────────────
+        // ── Right-click on panel chrome or empty grid space ─────────────
+        MouseArea {
+            anchors.fill:    parent
+            z:               0
+            acceptedButtons: Qt.RightButton
+            onClicked:       root._openHiddenMenu()
+        }
+
+        // ── Content ─────────────────────────────────────────────────────
         Column {
             id: panelColumn
             anchors {
@@ -190,52 +382,49 @@ PanelWindow {
             }
             spacing: 8
 
-            // ── Search bar ───────────────────────────────────────────────────
+            // ── Search bar ───────────────────────────────────────────────
             Rectangle {
                 id:     searchBar
                 width:  parent.width
                 height: 44
                 radius: 8
-
-                color: PanelColors.rowBackground
+                color:  PanelColors.rowBackground
                 Behavior on color { ColorAnimation { duration: PanelColors.transitionDuration } }
 
                 border.color: searchInput.activeFocus ? PanelColors.launcher : "transparent"
                 Behavior on border.color { ColorAnimation { duration: 150 } }
                 border.width: 0
 
-                // Search field + manual placeholder overlay
                 Item {
                     anchors {
-                        fill:       parent
-                        leftMargin: 12
+                        fill:        parent
+                        leftMargin:  12
                         rightMargin: 12
                     }
 
-                    // Placeholder text (visible only when the field is empty)
                     Text {
-                        anchors.fill: parent
-                        text:             " Search..."
-                        font.pixelSize:   13
-                        font.bold:        true
-                        font.family:      "JetBrainsMono Nerd Font"
-                        color:            PanelColors.textDim
+                        anchors.fill:      parent
+                        text:              " Search..."
+                        font.pixelSize:    13
+                        font.bold:         true
+                        font.family:       "JetBrainsMono Nerd Font"
+                        color:             PanelColors.textDim
                         verticalAlignment: Text.AlignVCenter
-                        visible:          searchInput.text === ""
+                        visible:           searchInput.text === ""
                     }
 
                     TextInput {
-                        id:            searchInput
-                        anchors.fill:  parent
-                        color:         PanelColors.textMain
-                        font.pixelSize: 13
-                        font.bold:     true
-                        font.family:   "JetBrainsMono Nerd Font"
-                        selectByMouse: true
-                        clip:          true
+                        id:                searchInput
+                        anchors.fill:      parent
+                        color:             PanelColors.textMain
+                        font.pixelSize:    13
+                        font.bold:         true
+                        font.family:       "JetBrainsMono Nerd Font"
+                        selectByMouse:     true
+                        clip:              true
                         verticalAlignment: TextInput.AlignVCenter
 
-                        onTextChanged: root.updateSelection()
+                        onTextChanged: filterTimer.restart()
 
                         Keys.onReturnPressed: {
                             if (root.selectedIndex !== -1) {
@@ -243,98 +432,91 @@ PanelWindow {
                                 if (item) item.executeApp()
                             }
                         }
-                        Keys.onEscapePressed: LauncherState.hide()
+                        Keys.onEscapePressed: {
+                            if (root._hiddenMenuOpen) root._closeHiddenMenu()
+                            else LauncherState.hide()
+                        }
                     }
                 }
             }
-            // ── App Grid ─────────────────────────────────────────────────────
-            Flickable {
-                id:             appGrid
-                width:          parent.width
-                height:         360
-                contentHeight:  flowLayout.implicitHeight
-                clip:           true
-                boundsBehavior: Flickable.StopAtBounds
 
-                Flow {
-                    id:       flowLayout
-                    width:    parent.width
-                    spacing:  8
+            // ── App grid ─────────────────────────────────────────────────
+            Item {
+                width:  parent.width
+                height: 348
+                clip:   true
 
-                    Repeater {
-                        id: appsRepeater
-                        model: DesktopEntries.applications
+                // Background scroll + right-click (z:0, under icon delegates)
+                MouseArea {
+                    anchors.fill:    parent
+                    z:               0
+                    acceptedButtons: Qt.LeftButton | Qt.RightButton
+                    onWheel: (wheel) => {
+                        if (wheel.angleDelta.y < 0) {
+                            if (root.currentPage < root.totalPages - 1) root.currentPage++
+                        } else {
+                            if (root.currentPage > 0) root.currentPage--
+                        }
+                    }
+                    onClicked: (mouse) => {
+                        if (mouse.button === Qt.RightButton)
+                            root._openHiddenMenu()
+                    }
+                }
 
-                        delegate: Rectangle {
-                            id: delegateRect
-                            
-                            // Filtering logic: hide items that don't match the search
-                            property bool isMatch: searchInput.text === "" || modelData.name.toLowerCase().includes(searchInput.text.toLowerCase())
-                            
-                            visible: isMatch
-                            width:   isMatch ? 108 : 0
-                            height:  isMatch ? 104 : 0
-                            radius:  12
+                Repeater {
+                    id: appsRepeater
+                    model: DesktopEntries.applications
+                    onCountChanged: filterTimer.restart()
 
-                            property bool isSelected: root.selectedIndex === index
+                    delegate: AppLauncherIcon {
+                        appId:              modelData.id
+                        appName:            modelData.name
+                        appIcon:            modelData.icon
+                        appData:            modelData
+                        delegateIndex:      index
+                        launcherItemsPerPage: root.itemsPerPage
+                        launcherCurrentPage:  root.currentPage
+                        launcherSelectedIdx:  root.selectedIndex
 
-                            // Dock hover logic (auto-applied if selected via keyboard)
-                            color: (isSelected || rowMouse.containsMouse) ? Qt.rgba(1, 1, 1, 0.08) : "transparent"
-                            Behavior on color { ColorAnimation { duration: 150 } }
+                        // Write-back: icon sets selectedIndex on hover
+                        onLauncherSelectedIdxChanged: {
+                            if (root.selectedIndex !== launcherSelectedIdx)
+                                root.selectedIndex = launcherSelectedIdx
+                        }
+                    }
+                }
+            }
 
-                            function executeApp() {
-                                modelData.execute()
-                                LauncherState.hide()
-                            }
+            // ── Pagination dots ──────────────────────────────────────────
+            Row {
+                anchors.horizontalCenter: parent.horizontalCenter
+                spacing: 8
+                visible: root.totalPages > 1
 
-                            Column {
-                                anchors.centerIn: parent
-                                spacing: 8
+                Repeater {
+                    model: root.totalPages
+                    Rectangle {
+                        width:  8
+                        height: 8
+                        radius: 4
+                        color:  index === root.currentPage ? PanelColors.launcher : PanelColors.border
+                        Behavior on color { ColorAnimation { duration: 150 } }
 
-                                // App Icon
-                                IconImage {
-                                    anchors.horizontalCenter: parent.horizontalCenter
-                                    implicitSize: 48
-                                    source:       Quickshell.iconPath(modelData.icon)
-                                    
-                                    // Dock hover scaling
-                                    scale: (delegateRect.isSelected || rowMouse.containsMouse) ? 1.1 : 1.0
-                                    Behavior on scale {
-                                        NumberAnimation { duration: 120; easing.type: Easing.OutCubic }
-                                    }
-                                }
-
-                                // App Name
-                                Text {
-                                    anchors.horizontalCenter: parent.horizontalCenter
-                                    text:                   modelData.name
-                                    font.pixelSize:         12
-                                    font.bold:              true
-                                    font.family:            "JetBrainsMono Nerd Font"
-                                    color:                  PanelColors.textMain
-                                    width:                  100
-                                    horizontalAlignment:    Text.AlignHCenter
-                                    elide:                  Text.ElideRight
-                                }
-                            }
-
-                            MouseArea {
-                                id: rowMouse
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                cursorShape:  Qt.PointingHandCursor
-
-                                onEntered: root.selectedIndex = index
-                                onClicked: delegateRect.executeApp()
-                            }
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape:  Qt.PointingHandCursor
+                            onClicked:    root.currentPage = index
                         }
                     }
                 }
             }
         }
 
-        // Escape anywhere on the panel also closes.
-        Keys.onEscapePressed: LauncherState.hide()
+        Keys.onEscapePressed: {
+            if (root._hiddenMenuOpen) root._closeHiddenMenu()
+            else LauncherState.hide()
+        }
         focus: true
     }
 }
