@@ -33,6 +33,7 @@ PanelWindow {
     property int  totalPages:     1
     property int  currentPage:    0
     property bool wallpaperMode:  false
+    property bool clipboardMode:  false
     readonly property int itemsPerPage: isGridView ? 15 : 6
 
     // Ordered list of original indices for all currently matched apps
@@ -53,24 +54,27 @@ PanelWindow {
         wallpaperGrid.currentIndex = 0
     }
 
-    Shortcut {
-        sequence: "Ctrl+G"
-        onActivated: {
-            if (root.wallpaperMode) return
-            root.isGridView = !root.isGridView
-            filterTimer.restart()
+    // ── Clipboard state ───────────────────────────────────────────────────
+    property var filteredClipboard: []
+
+    function updateClipboardFilter() {
+        var q = searchInput.text.toLowerCase()
+        var result = []
+        for (var i = 0; i < clipboardModel.count; i++) {
+            var entry = clipboardModel.get(i)
+            if (q === "" || entry.content.toLowerCase().includes(q))
+                result.push({ itemId: entry.itemId, content: entry.content, rawLine: entry.rawLine })
         }
+        root.filteredClipboard = result
+        clipboardList.currentIndex = 0
     }
 
     Shortcut {
-        sequence: "Ctrl+W"
+        sequence: "Ctrl+G"
         onActivated: {
-            root.wallpaperMode = !root.wallpaperMode
-            if (root.wallpaperMode) {
-                searchInput.text = ""
-                wallpaperLoader.loadWallpapers()
-            }
-            searchInput.forceActiveFocus()
+            if (root.wallpaperMode || root.clipboardMode) return
+            root.isGridView = !root.isGridView
+            filterTimer.restart()
         }
     }
 
@@ -165,11 +169,10 @@ PanelWindow {
         function onVisibleChanged() {
             root.animState = LauncherState.visible ? "open" : "closing"
             if (LauncherState.visible) {
-                searchInput.text = ""
-                root.currentPage = 0
-                root.wallpaperMode = false
                 root._closeHiddenMenu()
-                filterTimer.restart()
+                if (!root.wallpaperMode && !root.clipboardMode) {
+                    filterTimer.restart()
+                }
             } else {
                 root._closeHiddenMenu()
             }
@@ -178,16 +181,74 @@ PanelWindow {
 
     Connections {
         target: LauncherHiddenApps
-        function onHiddenAppsChanged() { filterTimer.restart() }
+        function onHiddenAppsChanged() { if(!root.wallpaperMode && !root.clipboardMode) filterTimer.restart() }
     }
 
     Connections {
         target: AppUsageTracker
-        function onUsageMapChanged() { filterTimer.restart() }
+        function onUsageMapChanged() { if(!root.wallpaperMode && !root.clipboardMode) filterTimer.restart() }
     }
 
     onAnimStateChanged: {
         if (animState === "open") searchInput.forceActiveFocus()
+    }
+
+    // ── Clipboard loader ──────────────────────────────────────────────────
+    QtObject {
+        id: clipboardLoader
+        function loadClipboard() {
+            clipboardModel.clear()
+            root.filteredClipboard = []
+            clipboardProc.running = false
+            clipboardProc.running = true
+        }
+    }
+
+    ListModel { id: clipboardModel }
+
+    Process {
+        id: clipboardProc
+        command: ["cliphist", "list"]
+        running: false
+        stdout: StdioCollector {
+            onStreamFinished: {
+                var lines = this.text.trim().split("\n")
+                clipboardModel.clear()
+                for (var i = 0; i < lines.length; i++) {
+                    var line = lines[i].trim()
+                    if (line === "") continue
+                    var parts = line.split("\t")
+                    if (parts.length >= 2) {
+                        var id = parts[0]
+                        var content = parts.slice(1).join("\t")
+                        clipboardModel.append({ itemId: id, content: content, rawLine: line })
+                    }
+                }
+                root.updateClipboardFilter()
+            }
+        }
+    }
+
+    // ── Clipboard actions ─────────────────────────────────────────────────
+    Process {
+        id: clipboardActionProc
+        running: false
+        command: ["true"]
+
+        function copyItem(rawLine) {
+            var escaped = rawLine.replace(/'/g, "'\\''")
+            clipboardActionProc.command = ["bash", "-c", "printf '%s\n' '" + escaped + "' | cliphist decode | wl-copy"]
+            clipboardActionProc.running = false
+            clipboardActionProc.running = true
+        }
+
+        function deleteItem(rawLine) {
+            var escaped = rawLine.replace(/'/g, "'\\''")
+            clipboardActionProc.command = ["bash", "-c", "printf '%s\n' '" + escaped + "' | cliphist delete"]
+            clipboardActionProc.running = false
+            clipboardActionProc.running = true
+            clipboardLoader.loadClipboard() // Refresh
+        }
     }
 
     // ── Wallpaper loader ──────────────────────────────────────────────────
@@ -260,7 +321,34 @@ PanelWindow {
     // ── IPC ───────────────────────────────────────────────────────────────
     IpcHandler {
         target: "launcher"
-        function toggle(): void { LauncherState.toggle() }
+
+        function toggle(): void {
+            if (!LauncherState.visible) {
+                root.wallpaperMode = false
+                root.clipboardMode = false
+                root.currentPage = 0
+                searchInput.text = ""
+            }
+            LauncherState.toggle()
+        }
+
+        function openWallpaper(): void {
+            root.wallpaperMode = true
+            root.clipboardMode = false
+            searchInput.text = ""
+            LauncherState.show()
+            wallpaperLoader.loadWallpapers()
+            searchInput.forceActiveFocus()
+        }
+
+        function openClipboard(): void {
+            root.clipboardMode = true
+            root.wallpaperMode = false
+            searchInput.text = ""
+            LauncherState.show()
+            clipboardLoader.loadClipboard()
+            searchInput.forceActiveFocus()
+        }
     }
 
     // ── Hidden-apps PopupWindow ───────────────────────────────────────────
@@ -433,7 +521,7 @@ PanelWindow {
     Rectangle {
         id: panel
 
-        readonly property int panelWidth: root.wallpaperMode ? 860 : (root.isGridView ? 740 : 600)
+        readonly property int panelWidth: root.wallpaperMode ? 860 : (root.clipboardMode ? 600 : (root.isGridView ? 740 : 600))
 
         width:  panelWidth
         height: panelColumn.implicitHeight + 20
@@ -551,7 +639,7 @@ PanelWindow {
 
                     Text {
                         anchors.fill:      parent
-                        text:              root.wallpaperMode ? "󰸉 Search wallpapers..." : " Search..."
+                        text:              root.wallpaperMode ? "󰸉 Search wallpapers..." : (root.clipboardMode ? "󰅌 Search clipboard..." : " Search...")
                         font.pixelSize:    13
                         font.bold:         true
                         font.family:       "JetBrainsMono Nerd Font"
@@ -575,6 +663,8 @@ PanelWindow {
                         onTextChanged: {
                             if (root.wallpaperMode)
                                 root.updateWallpaperFilter()
+                            else if (root.clipboardMode)
+                                root.updateClipboardFilter()
                             else
                                 filterTimer.restart()
                         }
@@ -606,34 +696,62 @@ PanelWindow {
                                     wallpaperGrid.positionViewAtIndex(cwidx, GridView.Contain);
                                     event.accepted = true;
                                 }
-                            } else if (event.key === Qt.Key_Down || event.key === Qt.Key_Up ||
+                            } else if (root.clipboardMode) {
+                                if (event.key === Qt.Key_Down || event.key === Qt.Key_Up ||
+                                    event.key === Qt.Key_Tab || event.key === Qt.Key_Backtab) {
+
+                                    if (root.filteredClipboard.length === 0) return;
+
+                                    var maxCidx = root.filteredClipboard.length - 1;
+                                    var ccidx = clipboardList.currentIndex;
+                                    if (ccidx === -1) ccidx = 0;
+
+                                    if (event.key === Qt.Key_Down || event.key === Qt.Key_Tab) {
+                                        ccidx = Math.min(ccidx + 1, maxCidx);
+                                    } else if (event.key === Qt.Key_Up || event.key === Qt.Key_Backtab) {
+                                        ccidx = Math.max(ccidx - 1, 0);
+                                    }
+
+                                    clipboardList.currentIndex = ccidx;
+                                    clipboardList.positionViewAtIndex(ccidx, ListView.Contain);
+                                    event.accepted = true;
+                                } else if (event.key === Qt.Key_Delete) {
+                                    if (root.filteredClipboard.length > 0 && clipboardList.currentIndex >= 0) {
+                                        var cItem = root.filteredClipboard[clipboardList.currentIndex];
+                                        clipboardActionProc.deleteItem(cItem.rawLine);
+                                        event.accepted = true;
+                                    }
+                                }
+                            } else {
+                                if (event.key === Qt.Key_Down || event.key === Qt.Key_Up ||
                                      event.key === Qt.Key_Tab  || event.key === Qt.Key_Backtab) {
 
-                                if (root.filteredApps.length === 0) return
+                                    if (root.filteredApps.length === 0) return
 
-                                var currentFidx = root.filteredApps.indexOf(root.selectedIndex)
-                                if (currentFidx === -1) currentFidx = 0
+                                    var currentFidx = root.filteredApps.indexOf(root.selectedIndex)
+                                    if (currentFidx === -1) currentFidx = 0
 
-                                var cols = root.isGridView ? 5 : 1
-                                var nextFidx = currentFidx
+                                    var cols = root.isGridView ? 5 : 1
+                                    var nextFidx = currentFidx
 
-                                if (event.key === Qt.Key_Down) {
-                                    nextFidx = Math.min(currentFidx + cols, root.filteredApps.length - 1)
-                                } else if (event.key === Qt.Key_Up) {
-                                    nextFidx = Math.max(currentFidx - cols, 0)
-                                } else if (event.key === Qt.Key_Tab) {
-                                    nextFidx = Math.min(currentFidx + 1, root.filteredApps.length - 1)
-                                } else if (event.key === Qt.Key_Backtab) {
-                                    nextFidx = Math.max(currentFidx - 1, 0)
+                                    if (event.key === Qt.Key_Down) {
+                                        nextFidx = Math.min(currentFidx + cols, root.filteredApps.length - 1)
+                                    } else if (event.key === Qt.Key_Up) {
+                                        nextFidx = Math.max(currentFidx - cols, 0)
+                                    } else if (event.key === Qt.Key_Tab) {
+                                        nextFidx = Math.min(currentFidx + 1, root.filteredApps.length - 1)
+                                    } else if (event.key === Qt.Key_Backtab) {
+                                        nextFidx = Math.max(currentFidx - 1, 0)
+                                    }
+
+                                    if (nextFidx !== currentFidx) {
+                                        root.selectedIndex = root.filteredApps[nextFidx]
+                                        var newPage = Math.floor(nextFidx / root.itemsPerPage)
+                                        if (newPage !== root.currentPage)
+                                            root.currentPage = newPage
+                                    }
+                                    event.accepted = true
                                 }
-
-                                if (nextFidx !== currentFidx) {
-                                    root.selectedIndex = root.filteredApps[nextFidx]
-                                    var newPage = Math.floor(nextFidx / root.itemsPerPage)
-                                    if (newPage !== root.currentPage)
-                                        root.currentPage = newPage
-                                }
-                                event.accepted = true
                             }
                         }
 
@@ -645,6 +763,14 @@ PanelWindow {
                                     root.wallpaperMode = false;
                                     searchInput.text = "";
                                     filterTimer.restart();
+                                    LauncherState.hide();
+                                }
+                            } else if (root.clipboardMode) {
+                                if (clipboardList.currentIndex >= 0 && clipboardList.currentIndex < root.filteredClipboard.length) {
+                                    var cp = root.filteredClipboard[clipboardList.currentIndex];
+                                    clipboardActionProc.copyItem(cp.rawLine);
+                                    root.clipboardMode = false;
+                                    searchInput.text = "";
                                     LauncherState.hide();
                                 }
                             } else {
@@ -659,7 +785,7 @@ PanelWindow {
                         }
 
                         Keys.onEscapePressed: {
-                            if (root.wallpaperMode) {
+                            if (root.wallpaperMode || root.clipboardMode) {
                                 LauncherState.hide()
                             } else if (root._hiddenMenuOpen) {
                                 root._closeHiddenMenu()
@@ -668,6 +794,87 @@ PanelWindow {
                             }
                         }
                     }
+                }
+            }
+
+            // ── Clipboard list ───────────────────────────────────────────
+            Item {
+                width:   parent.width
+                height:  400
+                clip:    true
+                visible: root.clipboardMode
+                opacity: root.clipboardMode ? 1.0 : 0.0
+                Behavior on opacity { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+
+                ListView {
+                    id:           clipboardList
+                    anchors.fill: parent
+                    clip:         true
+                    spacing:      4
+
+                    ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+
+                    model: root.filteredClipboard
+
+                    delegate: Rectangle {
+                        width:  clipboardList.width
+                        height: 38
+                        radius: 8
+                        color:  clipboardHover.containsMouse || index === clipboardList.currentIndex
+                                    ? Qt.rgba(1, 1, 1, 0.10)
+                                    : "transparent"
+                        Behavior on color { ColorAnimation { duration: 120 } }
+
+                        Rectangle {
+                            width: 3; height: parent.height - 12; radius: 2
+                            anchors {
+                                left:           parent.left
+                                leftMargin:     4
+                                verticalCenter: parent.verticalCenter
+                            }
+                            color: PanelColors.launcher
+                            visible: index === clipboardList.currentIndex
+                        }
+
+                        Text {
+                            anchors {
+                                left:           parent.left
+                                right:          parent.right
+                                leftMargin:     14
+                                rightMargin:    12
+                                verticalCenter: parent.verticalCenter
+                            }
+                            text:           modelData.content
+                            font.pixelSize: 13
+                            font.family:    "JetBrainsMono Nerd Font"
+                            color:          PanelColors.textMain
+                            elide:          Text.ElideRight
+                        }
+
+                        MouseArea {
+                            id:           clipboardHover
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape:  Qt.PointingHandCursor
+                            onClicked: {
+                                clipboardActionProc.copyItem(modelData.rawLine)
+                                root.clipboardMode = false
+                                searchInput.text = ""
+                                LauncherState.hide()
+                            }
+                        }
+                    }
+                }
+
+                // Empty state
+                Text {
+                    anchors.centerIn: parent
+                    text:             "Clipboard is empty"
+                    font.pixelSize:   14
+                    font.bold:        true
+                    font.family:      "JetBrainsMono Nerd Font"
+                    color:            PanelColors.textDim
+                    visible:          root.filteredClipboard.length === 0
                 }
             }
 
@@ -798,7 +1005,7 @@ PanelWindow {
                 width:   parent.width
                 height:  root.isGridView ? 412 : 292
                 clip:    true
-                visible: !root.wallpaperMode
+                visible: !root.wallpaperMode && !root.clipboardMode
                 Behavior on height { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
 
                 MouseArea {
@@ -821,7 +1028,7 @@ PanelWindow {
                 Repeater {
                     id: appsRepeater
                     model: DesktopEntries.applications
-                    onCountChanged: filterTimer.restart()
+                    onCountChanged: { if(!root.wallpaperMode && !root.clipboardMode) filterTimer.restart() }
 
                     delegate: AppLauncherIcon {
                         appId:               modelData.id
@@ -912,7 +1119,7 @@ PanelWindow {
             Row {
                 anchors.horizontalCenter: parent.horizontalCenter
                 spacing: 8
-                visible: root.totalPages > 1 && !root.wallpaperMode
+                visible: root.totalPages > 1 && !root.wallpaperMode && !root.clipboardMode
 
                 Repeater {
                     model: root.totalPages
