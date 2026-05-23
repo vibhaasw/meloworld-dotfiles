@@ -117,15 +117,6 @@ PanelWindow {
             anchors.centerIn: parent
             spacing: 6
 
-            LauncherDockButton {}
-
-            Rectangle {
-                width:   2
-                height:  36
-                radius:  1
-                color:   PanelColors.border
-                opacity: 0.6
-            }
 
             Repeater {
                 model: PinnedApps.apps

@@ -43,7 +43,6 @@ PanelWindow {
     }
 
     function _openHiddenMenu() {
-        if (LauncherHiddenApps.hiddenApps.length === 0) return
         if (_hiddenMenuOpen) { _closeHiddenMenu(); return }
         _hiddenMenuOpen         = true
         hiddenMenuInner.y       = 14
@@ -220,6 +219,18 @@ PanelWindow {
                     width:  parent.width
                     height: 2
                     color:  PanelColors.border
+                }
+
+                Text {
+                    width:          parent.width
+                    text:           "No hidden apps"
+                    font.pixelSize: 13
+                    font.family:    "JetBrainsMono Nerd Font"
+                    color:          PanelColors.textDim
+                    visible:        LauncherHiddenApps.hiddenApps.length === 0
+                    topPadding:     4
+                    bottomPadding:  4
+                    horizontalAlignment: Text.AlignHCenter
                 }
 
                 Repeater {

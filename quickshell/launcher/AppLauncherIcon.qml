@@ -121,18 +121,20 @@ Item {
     Connections {
         target: LauncherState
         function onVisibleChanged() {
-            if (!LauncherState.visible && ctxMenu.isOpen)
-                ctxMenu.closeMenu()
+            if (!LauncherState.visible) {
+                root._isHovered = false
+                if (ctxMenu.isOpen) ctxMenu.closeMenu()
+            }
         }
     }
 
-    // ── Visuals ───────────────────────────────────────────────────────────
-    HoverHandler { id: hover }
+    // ── Hover — tracked manually so it cleanly resets on popup close ──────
+    property bool _isHovered: false
 
     Rectangle {
         anchors.fill: parent
         radius:       12
-        color: (root.launcherSelectedIdx === root.delegateIndex || hover.hovered)
+        color: (root.launcherSelectedIdx === root.delegateIndex || root._isHovered || ctxMenu.isOpen)
                    ? Qt.rgba(1, 1, 1, 0.08)
                    : "transparent"
         Behavior on color { ColorAnimation { duration: 150 } }
@@ -148,7 +150,7 @@ Item {
             implicitSize: 48
             source: Quickshell.iconPath(root.appIcon)
 
-            scale: (root.launcherSelectedIdx === root.delegateIndex || hover.hovered) ? 1.1 : 1.0
+            scale: (root.launcherSelectedIdx === root.delegateIndex || root._isHovered || ctxMenu.isOpen) ? 1.1 : 1.0
             Behavior on scale {
                 NumberAnimation { duration: 120; easing.type: Easing.OutCubic }
             }
@@ -171,10 +173,12 @@ Item {
     MouseArea {
         anchors.fill:    parent
         z:               1
+        hoverEnabled:    true
         cursorShape:     Qt.PointingHandCursor
         acceptedButtons: Qt.LeftButton | Qt.RightButton
 
-        onEntered: root.launcherSelectedIdx = root.delegateIndex
+        onEntered: root._isHovered = true
+        onExited:  root._isHovered = false
 
         onClicked: (mouse) => {
             if (mouse.button === Qt.RightButton) {
@@ -215,6 +219,7 @@ Item {
         function closeMenu() {
             if (!isOpen) return
             isOpen = false
+            root._isHovered = false
             openAnim.stop()
             closeAnim.restart()
         }
