@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import Quickshell
 import Quickshell.Io
+import Qt.labs.settings
 import Quickshell.Wayland
 import Quickshell.Widgets
 import "../theme"
@@ -33,7 +34,13 @@ PanelWindow {
     property bool emojiMode:     false
     property bool hiddenMode:    false
 
-    property bool isGridView:   false
+    property bool isGridView: false
+    Settings {
+        fileName: Quickshell.env("HOME") + "/.config/meloworld-dotfiles/settings.conf"
+        category: "Launcher"
+        property alias isGridView: root.isGridView
+    }
+
     property int  currentPage:  0
     property int  totalPages:   1
     property var  filteredApps: []
@@ -307,9 +314,7 @@ PanelWindow {
                             }
                             if (t === "/h") {
                                 root._resetModes()
-                                root.isGridView    = false
-                                appView.isGridView = false
-                                root.hiddenMode    = true
+                                root.hiddenMode = true
                                 searchBar.clear()
                                 return
                             }
@@ -476,7 +481,7 @@ PanelWindow {
             LauncherClipboardView {
                 id:      clipboardView
                 width:   parent.width
-                height:  400
+                height:  260
                 visible: root.clipboardMode
                 clip:    true
                 opacity: root.clipboardMode ? 1.0 : 0.0
@@ -488,7 +493,7 @@ PanelWindow {
             LauncherWallpaperView {
                 id:      wallpaperView
                 width:   parent.width
-                height:  520
+                height:  600
                 visible: root.wallpaperMode
                 clip:    true
                 opacity: root.wallpaperMode ? 1.0 : 0.0
@@ -528,202 +533,104 @@ PanelWindow {
                     visible:          LauncherHiddenApps.hiddenApps.length === 0
                 }
 
-                ListView {
+                Loader {
                     anchors.fill: parent
-                    clip:         true
-                    spacing:      2
-                    model:        LauncherHiddenApps.hiddenApps
+                    sourceComponent: root.isGridView ? hiddenGridComp : hiddenListComp
+                }
 
-                    ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
-
-                    delegate: Item {
-                        id:                   hiddenDelegate
-                        required property var modelData
-                        width:                ListView.view.width
-                        height:               44
-
-                        Rectangle {
-                            id: hiddenRowRect
-                            anchors { fill: parent; leftMargin: 4; rightMargin: 4 }
-                            radius: 6
-                            color: hiddenRowHover.containsMouse ? PanelColors.rowBackground : "transparent"
-                            Behavior on color { ColorAnimation { duration: 120 } }
-
-                            Row {
-                                anchors { fill: parent; leftMargin: 12; rightMargin: 12 }
-                                spacing: 12
-
-                                IconImage {
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    implicitSize: 22
-                                    source: Quickshell.iconPath(modelData.icon)
+                Component {
+                    id: hiddenGridComp
+                    GridView {
+                        anchors.fill: parent
+                        clip: true
+                        cellWidth:  136
+                        cellHeight: 132
+                        ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+                        model: LauncherHiddenApps.hiddenApps
+                        delegate: Item {
+                            required property var modelData
+                            width: 136; height: 132
+                            Rectangle {
+                                anchors { fill: parent; margins: 8 }
+                                radius: 12
+                                color: gridHiddenHover.containsMouse ? Qt.rgba(1,1,1,0.08) : "transparent"
+                                Behavior on color { ColorAnimation { duration: 150 } }
+                                Column {
+                                    anchors.centerIn: parent
+                                    spacing: 6
+                                    width: parent.width - 8
+                                    IconImage {
+                                        anchors.horizontalCenter: parent.horizontalCenter
+                                        implicitSize: 64
+                                        source: Quickshell.iconPath(modelData.icon)
+                                    }
+                                    Text {
+                                        anchors.horizontalCenter: parent.horizontalCenter
+                                        text: modelData.name
+                                        font.pixelSize: 14; font.bold: true
+                                        font.family: "JetBrainsMono Nerd Font"
+                                        color: PanelColors.textMain
+                                        width: parent.width
+                                        horizontalAlignment: Text.AlignHCenter
+                                        wrapMode: Text.WrapAtWordBoundaryOrAnywhere
+                                        maximumLineCount: 2; elide: Text.ElideRight
+                                    }
                                 }
-
-                                Text {
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    text:           modelData.name
-                                    font.pixelSize: 16
-                                    font.bold:      true
-                                    font.family:    "JetBrainsMono Nerd Font"
-                                    color:          PanelColors.textMain
-                                    width:          hiddenAppsView.width - 14 - 22 - 12 - 12 - 8
-                                    elide:          Text.ElideRight
-                                }
-                            }
-
-                            MouseArea {
-                                id:              hiddenRowHover
-                                anchors.fill:    parent
-                                hoverEnabled:    true
-                                cursorShape:     Qt.PointingHandCursor
-                                acceptedButtons: Qt.LeftButton | Qt.RightButton
-                                onClicked: (mouse) => {
-                                    if (mouse.button === Qt.RightButton) {
-                                        if (hiddenCtxMenu.isOpen) hiddenCtxMenu.closeMenu()
-                                        else                      hiddenCtxMenu.openMenu()
-                                    } else {
+                                MouseArea {
+                                    id: gridHiddenHover
+                                    anchors.fill: parent
+                                    hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                                    onClicked: {
                                         LauncherHiddenApps.show(modelData.id)
                                         filterTimer.restart()
                                     }
                                 }
                             }
                         }
+                    }
+                }
 
-                        // ── Right-click context menu ──────────────────────
-                        PopupWindow {
-                            id: hiddenCtxMenu
-
-                            anchor.item:           hiddenDelegate
-                            anchor.edges:          Edges.Top
-                            anchor.gravity:        Edges.Top
-                            anchor.margins.bottom: 4
-
-                            color:          "transparent"
-                            implicitWidth:  200
-                            implicitHeight: hiddenCtxInner.implicitHeight
-                            visible:        false
-
-                            property bool isOpen: false
-
-                            function openMenu() {
-                                hiddenCtxInner.y       = 14
-                                hiddenCtxInner.opacity = 0.0
-                                visible                = true
-                                isOpen                 = true
-                                hiddenCtxOpenAnim.restart()
-                                hiddenCtxDismiss.restart()
-                            }
-                            function closeMenu() {
-                                if (!isOpen) return
-                                isOpen = false
-                                hiddenCtxOpenAnim.stop()
-                                hiddenCtxCloseAnim.restart()
-                            }
-
-                            Timer {
-                                id:          hiddenCtxDismiss
-                                interval:    3000
-                                running:     hiddenCtxMenu.isOpen
-                                onTriggered: hiddenCtxMenu.closeMenu()
-                            }
-
-                            SequentialAnimation {
-                                id: hiddenCtxOpenAnim
-                                ParallelAnimation {
-                                    NumberAnimation { target: hiddenCtxInner; property: "y";       to: 0;   duration: 220; easing.type: Easing.OutExpo  }
-                                    NumberAnimation { target: hiddenCtxInner; property: "opacity"; to: 1.0; duration: 170; easing.type: Easing.OutCubic }
-                                }
-                            }
-                            SequentialAnimation {
-                                id: hiddenCtxCloseAnim
-                                ParallelAnimation {
-                                    NumberAnimation { target: hiddenCtxInner; property: "y";       to: 14;  duration: 160; easing.type: Easing.InCubic }
-                                    NumberAnimation { target: hiddenCtxInner; property: "opacity"; to: 0.0; duration: 130; easing.type: Easing.InCubic }
-                                }
-                                ScriptAction { script: hiddenCtxMenu.visible = false }
-                            }
-
-                            mask: Region { item: hiddenCtxInner }
-
+                Component {
+                    id: hiddenListComp
+                    ListView {
+                        anchors.fill: parent
+                        clip: true; spacing: 2
+                        model: LauncherHiddenApps.hiddenApps
+                        ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+                        delegate: Item {
+                            id: hiddenDelegate
+                            required property var modelData
+                            width: ListView.view.width; height: 44
                             Rectangle {
-                                id: hiddenCtxInner
-                                width:          parent.width
-                                implicitHeight: hiddenCtxCol.implicitHeight + 24
-                                height:         implicitHeight
-                                radius:         10
-                                color:          PanelColors.popupBackground
-                                border.color:   PanelColors.border
-                                border.width:   2
-                                clip:           true
-                                Behavior on color        { ColorAnimation { duration: PanelColors.transitionDuration } }
-                                Behavior on border.color { ColorAnimation { duration: PanelColors.transitionDuration } }
-
-                                HoverHandler {
-                                    onHoveredChanged: { if (hovered) hiddenCtxDismiss.restart() }
-                                }
-
-                                Column {
-                                    id: hiddenCtxCol
-                                    anchors { top: parent.top; left: parent.left; right: parent.right; margins: 12 }
-                                    spacing: 4
-
-                                    Text {
-                                        width:          parent.width
-                                        text:           hiddenDelegate.modelData.name
-                                        font.pixelSize: 12
-                                        font.bold:      true
-                                        font.family:    "JetBrainsMono Nerd Font"
-                                        color:          PanelColors.textDim
-                                        bottomPadding:  4
-                                        elide:          Text.ElideRight
+                                anchors { fill: parent; leftMargin: 4; rightMargin: 4 }
+                                radius: 6
+                                color: hiddenRowHover.containsMouse ? PanelColors.rowBackground : "transparent"
+                                Behavior on color { ColorAnimation { duration: 120 } }
+                                Row {
+                                    anchors { fill: parent; leftMargin: 12; rightMargin: 12 }
+                                    spacing: 12
+                                    IconImage {
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        implicitSize: 22
+                                        source: Quickshell.iconPath(modelData.icon)
                                     }
-
-                                    Rectangle { width: parent.width; height: 2; color: PanelColors.border }
-
-                                    // Unhide entry
-                                    Item {
-                                        width:  hiddenCtxCol.width
-                                        height: 34
-
-                                        Rectangle {
-                                            anchors.fill: parent
-                                            radius:       6
-                                            color: unhideMouse.containsMouse
-                                                ? Qt.lighter(PanelColors.rowBackground, 1.15)
-                                                : PanelColors.rowBackground
-                                            Behavior on color { ColorAnimation { duration: 100 } }
-
-                                            Rectangle {
-                                                width: 3; height: parent.height - 10; radius: 2
-                                                anchors { left: parent.left; leftMargin: 4; verticalCenter: parent.verticalCenter }
-                                                color: PanelColors.textDim
-                                            }
-
-                                            Text {
-                                                anchors {
-                                                    left: parent.left; leftMargin: 14
-                                                    right: parent.right; rightMargin: 10
-                                                    verticalCenter: parent.verticalCenter
-                                                }
-                                                text:           "Unhide"
-                                                font.pixelSize: 13
-                                                font.bold:      true
-                                                font.family:    "JetBrainsMono Nerd Font"
-                                                color:          PanelColors.textMain
-                                            }
-
-                                            MouseArea {
-                                                id:           unhideMouse
-                                                anchors.fill: parent
-                                                hoverEnabled: true
-                                                onContainsMouseChanged: { if (containsMouse) hiddenCtxDismiss.restart() }
-                                                onClicked: {
-                                                    hiddenCtxMenu.closeMenu()
-                                                    LauncherHiddenApps.show(hiddenDelegate.modelData.id)
-                                                    filterTimer.restart()
-                                                }
-                                            }
-                                        }
+                                    Text {
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        text: modelData.name
+                                        font.pixelSize: 16; font.bold: true
+                                        font.family: "JetBrainsMono Nerd Font"
+                                        color: PanelColors.textMain
+                                        width: hiddenAppsView.width - 14 - 22 - 12 - 12 - 8
+                                        elide: Text.ElideRight
+                                    }
+                                }
+                                MouseArea {
+                                    id: hiddenRowHover
+                                    anchors.fill: parent
+                                    hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                                    onClicked: {
+                                        LauncherHiddenApps.show(modelData.id)
+                                        filterTimer.restart()
                                     }
                                 }
                             }

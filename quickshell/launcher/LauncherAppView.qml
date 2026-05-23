@@ -348,8 +348,17 @@ Item {
 
                 property bool isOpen: false
 
+                Connections {
+                    target: root
+                    function onOpenMenuDelegateIndexChanged() {
+                        if (root.openMenuDelegateIndex !== listDelegate.origIdx && listCtxMenu.isOpen)
+                            listCtxMenu.closeMenu()
+                    }
+                }
+
                 function openMenu() {
                     if (!listDelegate.appItem) return
+                    root.notifyMenuOpened(listDelegate.origIdx)
                     listCtxRepeater.model = listDelegate.appItem._buildMenuModel()
                     listCtxInner.y        = 14
                     listCtxInner.opacity  = 0.0
