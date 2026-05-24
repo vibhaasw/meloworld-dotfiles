@@ -327,7 +327,7 @@ PanelWindow {
                 rightPillText: {
                     if (root.clipboardMode) return "󰩺"
                     if (root.appModeActive)
-                        return root.isGridView ? "" : "󱗼"
+                        return root.isGridView ? "" : ""
                     return ""
                 }
                 rightPillDestructive: root.clipboardMode
