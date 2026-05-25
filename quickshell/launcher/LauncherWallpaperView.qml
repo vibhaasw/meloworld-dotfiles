@@ -14,10 +14,6 @@ Item {
     property var filteredWallpapers: []
 
     function load() {
-        if (wallpaperModel.count > 0) {
-            _applyFilter()
-            return
-        }
         wallpaperModel.clear()
         root.filteredWallpapers = []
         wallpaperProc.running = false
