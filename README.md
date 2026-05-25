@@ -213,8 +213,12 @@ cp -r vesktop ~/.config/
 cp -r zathura ~/.config/
 cp -r zed ~/.config/
 cp -r .zshrc ~/.zshrc
+
 find ~/.config/{quickshell,mango,rofi} -type f -name "*.sh" -exec chmod +x {} +
 sudo cp -r meloworld-sddm /usr/share/sddm/themes/
+
+mkdir -p ~/Pictures/Wallpapers
+cp -r assets/wallpapers ~/Pictures/
 ```
 
 add to `/etc/sddm.conf.d/theme.conf`:
@@ -242,6 +246,8 @@ chsh -s $(which zsh)
 ## 📦 extras
 
 the sound files (login chime, notification, screenshot, usb connect/remove) were made by me in bitwig studio. use them freely, a credit would be appreciated :3
+
+i dont own any of the wallpapers, most of them are just screenshots by me.
 
 i use zen browser with the [transparent zen extension](https://sameerasw.com/zen) and `#212121CC` background. for firefox, [Firefox Gnome Theme](https://github.com/rafaelmardojai/firefox-gnome-theme) works well.
 

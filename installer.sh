@@ -161,6 +161,33 @@ if ask_permission "Symlink dotfiles to ~/.config?"; then
         fi
     done
 
+    # ── Wallpapers Symlink ────────────────────────────────────────────────────────
+    info "Linking wallpapers..."
+
+    WALLPAPER_SRC="$INSTALL_LOC/assets/wallpapers"
+    WALLPAPER_DIR="$HOME/Pictures/Wallpapers"
+    WALLPAPER_TARGET="$WALLPAPER_DIR/meloworld-wallpapers"
+
+    if [ -d "$WALLPAPER_SRC" ]; then
+        mkdir -p "$WALLPAPER_DIR"
+        if [ -e "$WALLPAPER_TARGET" ] || [ -L "$WALLPAPER_TARGET" ]; then
+            if [ -L "$WALLPAPER_TARGET" ] && \
+               [ "$(readlink "$WALLPAPER_TARGET")" = "$WALLPAPER_SRC" ]; then
+                info "Wallpapers already linked."
+            else
+                mkdir -p "$BACKUP_DIR"
+                mv "$WALLPAPER_TARGET" "$BACKUP_DIR/"
+                ln -s "$WALLPAPER_SRC" "$WALLPAPER_TARGET"
+                success "Wallpapers linked."
+            fi
+        else
+            ln -s "$WALLPAPER_SRC" "$WALLPAPER_TARGET"
+            success "Wallpapers linked."
+        fi
+    else
+        warn "Wallpaper source directory not found at $WALLPAPER_SRC"
+    fi
+
     ZSHRC_TARGET="$HOME/.zshrc"
     ZSHRC_SRC="$INSTALL_LOC/.zshrc"
     if [ -f "$ZSHRC_SRC" ]; then
