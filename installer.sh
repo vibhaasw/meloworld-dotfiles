@@ -161,29 +161,26 @@ if ask_permission "Symlink dotfiles to ~/.config?"; then
         fi
     done
 
-    # ── Wallpapers Symlink ────────────────────────────────────────────────────────
-    info "Linking wallpapers..."
+    # ── Wallpapers Copy ───────────────────────────────────────────────────────────
+    info "Installing wallpapers..."
 
     WALLPAPER_SRC="$INSTALL_LOC/assets/wallpapers"
-    WALLPAPER_DIR="$HOME/Pictures/Wallpapers"
-    WALLPAPER_TARGET="$WALLPAPER_DIR/meloworld-wallpapers"
+    WALLPAPER_DEST="$HOME/Pictures/Wallpapers/meloworld-wallpapers"
 
     if [ -d "$WALLPAPER_SRC" ]; then
-        mkdir -p "$WALLPAPER_DIR"
-        if [ -e "$WALLPAPER_TARGET" ] || [ -L "$WALLPAPER_TARGET" ]; then
-            if [ -L "$WALLPAPER_TARGET" ] && \
-               [ "$(readlink "$WALLPAPER_TARGET")" = "$WALLPAPER_SRC" ]; then
-                info "Wallpapers already linked."
-            else
-                mkdir -p "$BACKUP_DIR"
-                mv "$WALLPAPER_TARGET" "$BACKUP_DIR/"
-                ln -s "$WALLPAPER_SRC" "$WALLPAPER_TARGET"
-                success "Wallpapers linked."
-            fi
-        else
-            ln -s "$WALLPAPER_SRC" "$WALLPAPER_TARGET"
-            success "Wallpapers linked."
+        mkdir -p "$HOME/Pictures/Wallpapers"
+
+        # Backup existing wallpapers directory if it's not already managed
+        if [ -e "$WALLPAPER_DEST" ] && [ ! -L "$WALLPAPER_DEST" ]; then
+            mkdir -p "$BACKUP_DIR"
+            mv "$WALLPAPER_DEST" "$BACKUP_DIR/"
         fi
+
+        # Copy wallpapers fresh
+        rm -rf "$WALLPAPER_DEST"
+        cp -r "$WALLPAPER_SRC" "$WALLPAPER_DEST"
+
+        success "Wallpapers installed."
     else
         warn "Wallpaper source directory not found at $WALLPAPER_SRC"
     fi
