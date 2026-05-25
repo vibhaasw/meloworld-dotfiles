@@ -109,6 +109,14 @@ SectionBase {
                 visible: status === Image.Ready
                 mipmap: true
                 smooth: true
+
+                scale: profileMouseArea.containsMouse ? 1.05 : 1.0
+                Behavior on scale {
+                    NumberAnimation {
+                        duration: 200
+                        easing.type: Easing.OutCubic
+                    }
+                }
             }
 
             Text {
@@ -118,6 +126,14 @@ SectionBase {
                 font.pixelSize: 36
                 font.family: "JetBrainsMono Nerd Font"
                 color: PanelColors.textAccent
+
+                scale: profileMouseArea.containsMouse ? 1.05 : 1.0
+                Behavior on scale {
+                    NumberAnimation {
+                        duration: 200
+                        easing.type: Easing.OutCubic
+                    }
+                }
             }
 
             Rectangle {
@@ -141,15 +157,22 @@ SectionBase {
 
                 Rectangle {
                     anchors.fill: parent
-                    anchors.margins: 4
-                    color: "#80000000"
-                    visible: profileMouseArea.containsMouse
-                    radius: 2
+                    anchors.margins: 2
+                    color: PanelColors.barBackground
+                    radius: 3
+
+                    opacity: profileMouseArea.containsMouse ? 0.8 : 0.0
+                    Behavior on opacity {
+                        NumberAnimation {
+                            duration: 200
+                            easing.type: Easing.OutCubic
+                        }
+                    }
 
                     Text {
                         anchors.centerIn: parent
                         text: "󰏫"
-                        color: "white"
+                        color: PanelColors.textMain
                         font.family: "JetBrainsMono Nerd Font"
                         font.pixelSize: 20
                     }

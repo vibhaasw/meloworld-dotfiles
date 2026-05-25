@@ -88,7 +88,7 @@ if ask_permission "Install required packages?"; then
         mangowm quickshell pipewire pipewire-pulse wireplumber bluez bluez-utils
         brightnessctl ghostty power-profiles-daemon papirus-icon-theme sddm
         ttf-jetbrains-mono-nerd grim slurp awww bibata-cursor-theme-bin eza
-        zed zsh zsh-autosuggestions zsh-syntax-highlighting adw-gtk-theme
+        zed zsh zsh-autosuggestions zsh-syntax-highlighting adw-gtk-theme zenity
         xdg-desktop-portal-wlr hypridle hyprlock cliphist wl-clipboard playerctl
         zoxide bat fd fzf ripgrep lazygit noto-fonts-emoji switcheroo-control
     )
@@ -112,8 +112,31 @@ else
     info "Skipped dependency installation.\n"
 fi
 
-# ── 3. Targeted Symlinking ────────────────────────────────────────────────────
-info "Step 3: Configurations"
+# ── 3. Keyboard Configuration ─────────────────────────────────────────────────
+info "Step 3: Keyboard Configuration"
+if ask_permission "Configure keyboard layout for MangoWM?"; then
+    # Attempt to detect the current system layout (defaults to 'us' if it fails)
+    CURRENT_LAYOUT=$(localectl status 2>/dev/null | awk '/X11 Layout/ {print $3}' | head -n 1)
+    CURRENT_LAYOUT=${CURRENT_LAYOUT:-us}
+
+    echo -ne "${PURPLE}==> ${YELLOW}Enter your preferred keyboard layout (e.g., us, tr, de, fr) [default: ${CURRENT_LAYOUT}]: ${RESET}"
+    read -r USER_LAYOUT
+    USER_LAYOUT=${USER_LAYOUT:-$CURRENT_LAYOUT}
+
+    MANGO_CONF="$INSTALL_LOC/mango/config.conf"
+
+    if [ -f "$MANGO_CONF" ]; then
+        sed -i "s/^xkb_rules_layout=.*/xkb_rules_layout=$USER_LAYOUT/" "$MANGO_CONF"
+        success "Keyboard layout set to '$USER_LAYOUT' in MangoWM config.\n"
+    else
+        warn "MangoWM config file not found at $MANGO_CONF! Could not update layout.\n"
+    fi
+else
+    info "Skipped keyboard configuration.\n"
+fi
+
+# ── 4. Targeted Symlinking ────────────────────────────────────────────────────
+info "Step 4: Configurations"
 if ask_permission "Symlink dotfiles to ~/.config?"; then
     for item in "${TARGETS[@]}"; do
         TARGET_PATH="$HOME/.config/$item"
@@ -157,8 +180,8 @@ else
     info "Skipped configurations symlinking.\n"
 fi
 
-# ── 4. System & SDDM ──────────────────────────────────────────────────────────
-info "Step 4: System Setup"
+# ── 5. System & SDDM ──────────────────────────────────────────────────────────
+info "Step 5: System Setup"
 
 if ask_permission "Enable SDDM (and disable other display managers)?"; then
     sudo systemctl disable gdm lightdm ly 2>/dev/null || true
