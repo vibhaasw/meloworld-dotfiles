@@ -2,7 +2,7 @@
 
 # 🌿 meloworld
 
-*a rice that feels like /home <3*
+_a rice that feels like /home <3_
 
 </div>
 
@@ -26,16 +26,16 @@
 
 meloworld is my personal arch linux desktop. i've been working on it for a while now, just trying to fit everything to my taste and build a cozy and safe space out of it. "what is done in love, is done well"
 
-| | |
-|---|---|
-| **os** | Arch Linux |
-| **wm** | [MangoWM](https://github.com/mangowm/mango) |
-| **shell layer** | [Quickshell](https://quickshell.org/) |
-| **launcher** | custom (quickshell) |
-| **terminal** | [Ghostty](https://ghostty.org/) |
-| **shell** | zsh |
-| **editor** | [Zed](https://zed.dev/) |
-| **font** | [JetBrainsMono Nerd Font](https://www.nerdfonts.com/) |
+|                 |                                                       |
+| --------------- | ----------------------------------------------------- |
+| **os**          | Arch Linux                                            |
+| **wm**          | [MangoWM](https://github.com/mangowm/mango)           |
+| **shell layer** | [Quickshell](https://quickshell.org/)                 |
+| **launcher**    | custom (quickshell)                                   |
+| **terminal**    | [Ghostty](https://ghostty.org/)                       |
+| **shell**       | zsh                                                   |
+| **editor**      | [Zed](https://zed.dev/)                               |
+| **font**        | [JetBrainsMono Nerd Font](https://www.nerdfonts.com/) |
 
 ---
 
@@ -166,7 +166,6 @@ the discord theme is based on [midnight](https://github.com/refact0r/midnight-di
 
 </details>
 
-
 <details>
 <summary>🐱 idle screen</summary>
 <br>
@@ -195,6 +194,7 @@ chmod +x installer.sh
 <br>
 
 dependencies
+
 ```bash
 paru -S mangowm quickshell pipewire pipewire-pulse wireplumber bluez bluez-utils brightnessctl ghostty power-profiles-daemon ttf-jetbrains-mono-nerd grim slurp awww bibata-cursor-theme-bin papirus-icon-theme zed zsh zsh-autosuggestions zsh-syntax-highlighting adw-gtk-theme xdg-desktop-portal-wlr hypridle hyprlock cliphist wl-clipboard playerctl zoxide bat fd ripgrep lazygit switcheroo-control noto-fonts-emoji fzf zenity
 
@@ -222,12 +222,14 @@ cp -r assets/wallpapers ~/Pictures/
 ```
 
 add to `/etc/sddm.conf.d/theme.conf`:
+
 ```
 [Theme]
 Current=meloworld-sddm
 ```
 
 apply gtk themes and window preferences:
+
 ```bash
 gsettings set org.gnome.desktop.wm.preferences button-layout ":"
 gsettings set org.gnome.desktop.interface gtk-theme 'adw-gtk3-dark'
@@ -235,6 +237,7 @@ gsettings set org.gnome.desktop.interface color-scheme 'prefer-dark'
 ```
 
 set zsh as your default shell:
+
 ```bash
 chsh -s $(which zsh)
 ```
@@ -245,23 +248,23 @@ chsh -s $(which zsh)
 
 ## 📦 extras
 
+i have a [neovim theme](https://github.com/melatonia/nvim) based on the same color palette!
+
 the sound files (login chime, notification, screenshot, usb connect/remove) were made by me in bitwig studio. use them freely, a credit would be appreciated :3
 
 i dont own any of the wallpapers, most of them are just screenshots by me.
 
 i use zen browser with the [transparent zen extension](https://sameerasw.com/zen) and `#212121CC` background. for firefox, [Firefox Gnome Theme](https://github.com/rafaelmardojai/firefox-gnome-theme) works well.
 
-
 <details>
 <summary>some usage tips</summary>
 <br>
-
 
 - im open to questions and feature requests, dont hesitate to hit me up on reddit or github (i dont check these places often so if i reply late dont worry)
 - for night light to work, you need to set your location in the file (~/.config/mango/scripts/nightlight.sh) (it activates based on time of day, so you might not notice right away, try toggling it at night.)
 - you can set your profile picture by just clicking the dashboard area.
 - the wallpaper selector reads your "~/Pictures/Wallpapers" folder.
-- you can switch between launcher modes with the prefixes. /h for hidden apps, /w for wallpapers, /g for grid-list view switch. 
+- you can switch between launcher modes with the prefixes. /h for hidden apps, /w for wallpapers, /g for grid-list view switch.
 - dashboard and launcher have apps pinning and switcheroo-control support.
 - the brightness and audio pills and sliders are scrollable. you can also scroll workspaces by scrolling on the numbers, or super + scroll anywhere.
 
@@ -281,6 +284,6 @@ go leave them a star! ⭐
 
 <div align="center">
 
-*all the world is lucky to be your home* 🌿
+_all the world is lucky to be your home_ 🌿
 
 </div>

@@ -104,7 +104,7 @@ Item {
         }
 
         QuickToggle {
-            icon: NotificationState.dndOn ? "󰂛" : "󰂚"
+            icon: NotificationState.dndOn ? "" : ""
             label: "DND"
             active: NotificationState.dndOn
             accentColor: Colors.purple200
