@@ -109,7 +109,7 @@ Item {
                 "elif command -v feh >/dev/null 2>&1; then " +
                 "  feh --bg-scale '" + p + "'; " +
                 "fi; " +
-                "ln -sf '" + p + "' \"$HOME/.config/hypr/wallpaper.png\""
+                "ln -sf '" + p + "' \"$HOME/.config/quickshell/lockscreen/wallpaper\""
             ]
             wallpaperSetProc.running = false
             wallpaperSetProc.running = true
