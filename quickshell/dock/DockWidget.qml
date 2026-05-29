@@ -14,7 +14,7 @@ PanelWindow {
     anchors.right:  true
 
     exclusionMode: ExclusionMode.Ignore
-    WlrLayershell.layer: WlrLayershell.Overlay
+    WlrLayershell.layer: WlrLayershell.Top
     color:         "transparent"
 
     readonly property int margin:     8
