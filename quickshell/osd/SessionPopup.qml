@@ -149,7 +149,7 @@ PopupBase {
                             SessionState.hide()
                             if      (root.menuState === "confirm_shutdown") Quickshell.execDetached(["systemctl", "poweroff"])
                             else if (root.menuState === "confirm_reboot")   Quickshell.execDetached(["systemctl", "reboot"])
-                            else if (root.menuState === "confirm_logout")   Quickshell.execDetached(["mmsg", "-q"])
+                            else if (root.menuState === "confirm_logout")   Quickshell.execDetached(["mmsg", "dispatch", "quit"])
                         }
                     }
                 }
