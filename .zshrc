@@ -65,31 +65,104 @@ function command_not_found_handler {
 
 # ── Prompt ────────────────────────────────────────────────────────────────────
 setopt PROMPT_SUBST
+autoload -Uz add-zsh-hook
 
-typeset -gA JOVIAL_PALETTE=(
-  host    '%F{157}'
-  user    '%F{253}'
-  path    '%B%F{228}'
-  conj.   '%F{102}'
-  typing  '%F{252}'
-  normal  '%F{252}'
-  time    '%F{254}'
-  success '%F{040}'
-  error   '%F{203}'
+typeset -gA MELO_PALETTE=(
+  host    '%F{#a5d6a7}'   # green200    – accent
+  user    '%F{#eeeeee}'   # grey200    – near-white text
+  path    '%B%F{#fff59d}' # yellow200  – bright path (bold preserved)
+  conj.   '%F{#78909c}'   # blueGrey400 – muted separators
+  git     '%F{#80cbc4}'   # teal200
+  typing  '%F{#bdbdbd}'   # grey400    – prompt cursor line
+  normal  '%F{#bdbdbd}'   # grey400    – structural chrome
+  time    '%F{#e0e0e0}'   # grey300    – subtle right-prompt
+  success '%F{#a5d6a7}'   # green200   – exit ok
+  error   '%F{#ef9a9a}'   # red200     – exit fail
 )
 
-PS1=""
-PS1+="${JOVIAL_PALETTE[normal]}╭─["
-PS1+="${JOVIAL_PALETTE[user]}%n%f"
-PS1+="${JOVIAL_PALETTE[normal]}] "
-PS1+="${JOVIAL_PALETTE[conj.]}as%f "
-PS1+="${JOVIAL_PALETTE[host]}%m%f "
-PS1+="${JOVIAL_PALETTE[conj.]}in%f "
-PS1+="${JOVIAL_PALETTE[path]}%~%f"
-PS1+=$'\n'
-PS1+="${JOVIAL_PALETTE[typing]}╰──➤ %f"
+# ── Git branch (sync, lightweight) ───────────────────────────────────────────
+typeset -g _melo_git_branch=""
 
-RPS1="${JOVIAL_PALETTE[time]}%T%f"
+function _melo_update_git() {
+  local ref
+  ref=$(git symbolic-ref HEAD 2>/dev/null) \
+    || ref=$(git describe --tags --exact-match 2>/dev/null) \
+    || ref=$(git rev-parse --short HEAD 2>/dev/null) \
+    || { _melo_git_branch=""; return; }
+  _melo_git_branch="${ref#refs/heads/}"
+}
+
+add-zsh-hook chpwd _melo_update_git
+add-zsh-hook precmd _melo_update_git
+
+# ── Right-aligned time (printed before PS1 via precmd) ───────────────────────
+function _melo_print_time() {
+  local current_time="${(%):-"%T"}"
+  local -i time_len=${#current_time}
+  local -i align_col=$(( COLUMNS - time_len ))
+  # \e[<n>G = Cursor Horizontal Absolute; %{%} = zero-width for zsh
+  print -Pn "${MELO_PALETTE[time]}%B%{\e[${align_col}G%}${current_time}%b%f\n"
+}
+
+add-zsh-hook precmd _melo_print_time
+
+# Jovial-style length helper: expands prompt sequences then strips ANSI codes
+# (S%%) cannot handle hex %F{#rrggbb} colors — must strip ANSI bytes directly
+function _melo_strlen() {
+  local str="${(%)1}"
+  local result=""
+  local unstyle_regex=$'\e\[[0-9;]*[a-zA-Z]'
+  while [[ -n $str ]]; do
+    if [[ $str =~ $unstyle_regex ]]; then
+      result+=${str[1,MBEGIN-1]}
+      str=${str[MEND+1,-1]}
+    else
+      break
+    fi
+  done
+  result+=$str
+  echo ${#result}
+}
+
+function _melo_build_ps1() {
+  local host_seg="${MELO_PALETTE[host]}%m%f"
+  local user_seg="${MELO_PALETTE[user]}%n%f"
+  local git_seg=""
+  [[ -n $_melo_git_branch ]] && \
+    git_seg="${MELO_PALETTE[conj.]} on %f${MELO_PALETTE[normal]}(%f${MELO_PALETTE[git]}${_melo_git_branch}${MELO_PALETTE[normal]})%f"
+
+  local -i w_host=$(_melo_strlen "${host_seg}")
+  local -i w_user=$(_melo_strlen "${user_seg}")
+  local -i w_path=$(_melo_strlen "%~")
+  local -i w_git=$(_melo_strlen "${git_seg}")
+
+  # t_host: evaluated at col 0, must fit entire line
+  # "╭─[" + host + "] as " + user + " in " + path + git = 3+5+4 chrome
+  local -i t_host=$(( 3 + w_host + 5 + w_user + 4 + w_path + w_git ))
+  # t_user: evaluated after "╭─[host] as " printed (3+w_host+5 consumed)
+  local -i t_user=$(( w_user + 4 + w_path + w_git ))
+  # t_git: evaluated after everything else printed
+  local -i t_git=$(( w_git ))
+
+  local host_block="${MELO_PALETTE[normal]}╭─[%f${host_seg}${MELO_PALETTE[normal]}] ${MELO_PALETTE[conj.]}as%f "
+  local host_hidden="${MELO_PALETTE[normal]}╭─%f"
+
+  PS1=""
+  PS1+="%-${t_host}(l.${host_block}.${host_hidden})"
+  PS1+="%-${t_user}(l.${user_seg} ${MELO_PALETTE[conj.]}in%f .)"
+  PS1+="${MELO_PALETTE[path]}%~%b%f"
+  [[ -n $_melo_git_branch ]] && PS1+="%-${t_git}(l.${git_seg}.)"
+  PS1+=$'\n'
+  PS1+="${MELO_PALETTE[typing]}╰──➤ %f"
+}
+
+add-zsh-hook precmd _melo_build_ps1
+
+# Redraw on terminal resize so time and responsive parts reflow
+function _melo_winch() { zle && zle reset-prompt; }
+trap '_melo_winch' WINCH
+
+RPS1=""
 
 # ── Aliases ───────────────────────────────────────────────────────────────────
 alias zed='zeditor'
