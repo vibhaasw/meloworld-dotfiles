@@ -452,7 +452,7 @@ PanelWindow {
                     anchors.fill: parent; hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
                     onClicked: {
-                        Quickshell.execDetached(["ghostty", "--title=nmtui", "-e", "nmtui"])
+                        Quickshell.execDetached(["kitty", "--title=nmtui", "-e", "nmtui"])
                         SessionState.wifiPopupVisible = false
                     }
                 }

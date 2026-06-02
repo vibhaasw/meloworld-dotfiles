@@ -66,6 +66,29 @@ function command_not_found_handler {
 # ── Prompt ────────────────────────────────────────────────────────────────────
 setopt PROMPT_SUBST
 autoload -Uz add-zsh-hook
+zmodload zsh/datetime  # provides $EPOCHREALTIME
+
+typeset -gF _melo_cmd_start=0
+typeset -gi _melo_last_exit=0
+
+function _melo_preexec()  { _melo_cmd_start=$EPOCHREALTIME; }
+function _melo_precmd_capture() { _melo_last_exit=$?; }
+
+function _melo_format_elapsed() {
+  local -F e=$(( EPOCHREALTIME - _melo_cmd_start ))
+  local -i s=$e
+  local -i m=$(( s / 60 ))
+  local -i h=$(( m / 60 ))
+
+  if   (( s < 1  )); then printf ''
+  elif (( h > 0  )); then printf '~%dh %dm' $h $(( m % 60 ))
+  elif (( m > 0  )); then printf '~%dm %ds' $m $(( s % 60 ))
+  else                    printf '~%ds'     $s
+  fi
+}
+
+add-zsh-hook preexec _melo_preexec
+add-zsh-hook precmd  _melo_precmd_capture  # must be registered FIRST
 
 typeset -gA MELO_PALETTE=(
   host    '%F{#a5d6a7}'   # green200    – accent
@@ -154,6 +177,16 @@ function _melo_build_ps1() {
   [[ -n $_melo_git_branch ]] && PS1+="%-${t_git}(l.${git_seg}.)"
   PS1+=$'\n'
   PS1+="${MELO_PALETTE[typing]}╰──➤ %f"
+  local elapsed_seg=""
+  if (( _melo_cmd_start > 0 )); then
+    elapsed_seg="%F{#ffe082}$(_melo_format_elapsed)%f"
+    _melo_cmd_start=0
+  fi
+
+  if   (( _melo_last_exit != 0 ));  then RPS1="${MELO_PALETTE[conj.]}exit:${MELO_PALETTE[error]}${_melo_last_exit}%f"
+  elif [[ -n $elapsed_seg ]];        then RPS1="$elapsed_seg"
+  else                                    RPS1=""
+  fi
 }
 
 add-zsh-hook precmd _melo_build_ps1

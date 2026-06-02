@@ -14,14 +14,13 @@ _a rice that feels like /home <3_
 
 ![desktop preview](assets/desktop.png)
 
-
 <details>
   <summary>
     <h3>☀️ light mode</h3>
   </summary>
 
-  ![desktop light mode preview](assets/desktop-light.png)
-  
+![desktop light mode preview](assets/desktop-light.png)
+
 </details>
 
 ---
@@ -34,7 +33,7 @@ meloworld is my personal arch linux desktop. i've been working on it for a while
 | **wm**          | [MangoWM](https://github.com/mangowm/mango)           |
 | **shell layer** | [Quickshell](https://quickshell.org/)                 |
 | **launcher**    | custom (quickshell)                                   |
-| **terminal**    | [Ghostty](https://ghostty.org/)                       |
+| **terminal**    | [kitty](https://sw.kovidgoyal.net/kitty/)             |
 | **shell**       | zsh                                                   |
 | **editor**      | [Zed](https://zed.dev/)                               |
 | **font**        | [JetBrainsMono Nerd Font](https://www.nerdfonts.com/) |
@@ -198,7 +197,7 @@ chmod +x installer.sh
 dependencies
 
 ```bash
-paru -S mangowm quickshell pipewire pipewire-pulse wireplumber bluez bluez-utils brightnessctl ghostty power-profiles-daemon ttf-jetbrains-mono-nerd grim slurp awww bibata-cursor-theme-bin papirus-icon-theme zed zsh zsh-autosuggestions zsh-syntax-highlighting adw-gtk-theme xdg-desktop-portal-wlr hypridle hyprlock cliphist wl-clipboard playerctl zoxide bat fd ripgrep lazygit switcheroo-control noto-fonts-emoji fzf zenity
+paru -S mangowm quickshell pipewire pipewire-pulse wireplumber bluez bluez-utils brightnessctl kitty power-profiles-daemon ttf-jetbrains-mono-nerd grim slurp awww bibata-cursor-theme-bin papirus-icon-theme zed zsh zsh-autosuggestions zsh-syntax-highlighting adw-gtk-theme xdg-desktop-portal-wlr hypridle hyprlock cliphist wl-clipboard playerctl zoxide bat fd ripgrep lazygit switcheroo-control noto-fonts-emoji fzf zenity
 
 sudo systemctl enable --now bluetooth power-profiles-daemon switcheroo-control
 ```
@@ -209,7 +208,7 @@ cd meloworld-dotfiles
 
 cp -r quickshell ~/.config/
 cp -r mango ~/.config/
-cp -r ghostty ~/.config/
+cp -r kitty ~/.config/
 cp -r hypr ~/.config/
 cp -r vesktop ~/.config/
 cp -r zathura ~/.config/
@@ -249,7 +248,6 @@ chsh -s $(which zsh)
 ---
 
 ## 📦 extras
-
 
 <details>
   <summary>

@@ -205,7 +205,7 @@ PopupBase {
             }
             Process {
                 id: bluetoothctlProc
-                command: ["ghostty", "--title=bluetoothctl", "-e", "bluetoothctl"]
+                command: ["kitty", "--title=bluetoothctl", "-e", "bluetoothctl"]
                 running: false
             }
             MouseArea {

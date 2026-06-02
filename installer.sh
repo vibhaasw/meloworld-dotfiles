@@ -13,7 +13,7 @@ RESET='\033[0m'
 # ── Paths & Variables ─────────────────────────────────────────────────────────
 REPO_NAME="meloworld-dotfiles"
 INSTALL_LOC="$HOME/.config/$REPO_NAME"
-TARGETS=("quickshell" "mango" "ghostty" "hypr" "rofi" "zed")
+TARGETS=("quickshell" "mango" "kitty" "hypr" "rofi" "zed")
 
 # ── Helper Functions ──────────────────────────────────────────────────────────
 info() { echo -e "${BLUE}==>${RESET} $1"; }
@@ -103,7 +103,7 @@ info "Step 2: Dependencies"
 if ask_permission "Install required packages?"; then
   PACKAGES=(
     mangowm quickshell pipewire pipewire-pulse wireplumber bluez bluez-utils
-    brightnessctl ghostty power-profiles-daemon papirus-icon-theme sddm
+    brightnessctl kitty power-profiles-daemon papirus-icon-theme sddm
     ttf-jetbrains-mono-nerd grim slurp bibata-cursor-theme-bin eza
     zed zsh zsh-autosuggestions zsh-syntax-highlighting adw-gtk-theme zenity
     xdg-desktop-portal-wlr hypridle hyprlock cliphist wl-clipboard playerctl
