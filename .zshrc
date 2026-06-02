@@ -3,6 +3,8 @@ HISTFILE=~/.histfile
 HISTSIZE=10000
 SAVEHIST=10000
 
+typeset -U path PATH
+
 setopt extended_history      # Record timestamp of command in HISTFILE
 setopt hist_ignore_dups      # Ignore consecutive duplicates
 setopt hist_ignore_all_dups  # Remove older duplicate entries from history
@@ -197,13 +199,20 @@ eval "$(zoxide init zsh --cmd cd)"
 
 # fzf with fd backend
 
-source /usr/share/fzf/key-bindings.zsh
-source /usr/share/fzf/completion.zsh
+[[ -f /usr/share/fzf/key-bindings.zsh ]] && source /usr/share/fzf/key-bindings.zsh
+[[ -f /usr/share/fzf/completion.zsh ]]   && source /usr/share/fzf/completion.zsh
 
 export FZF_DEFAULT_COMMAND='fd --type f --hidden --follow --exclude .git'
 export FZF_CTRL_T_COMMAND='fd --type f --hidden --follow --exclude .git'
 export FZF_ALT_C_COMMAND='fd --type d --hidden --follow --exclude .git'
-export FZF_DEFAULT_OPTS='--height 40% --layout=reverse --border'
+export FZF_DEFAULT_OPTS='--height 40% --layout=reverse --border --bind "ctrl-/:toggle-preview"' 
+
+alias gs='git status'
+alias gd='git diff'
+alias gl='git log --oneline --graph --all'
+alias ga='git add'
+alias gc='git commit'
+alias gp='git push'
 
 # lazygit
 alias lg='lazygit'
@@ -258,7 +267,12 @@ function update() {
 # idle
 alias sleepy='quickshell -c ~/.config/quickshell/idle-overlay'
 
+export EDITOR=nvim
+export VISUAL=nvim
+export SUDO_EDITOR=nvim
+
 export PATH="$HOME/.cargo/bin:$PATH"
+
 
 # ── Greeting ──────────────────────────────────────────────────────────────────
 cat <<'EOF'
