@@ -181,7 +181,7 @@ the discord theme is based on [midnight](https://github.com/refact0r/midnight-di
 
 ![idle](assets/idle.png)
 
-a sleeping cat appears after a few minutes of inactivity. dims the screen, breathing animation, animated z's drifting up. any input dismisses it with a fade.
+a sleeping cat appears after a few minutes of inactivity. dims the screen, breathing animation, animated z's drifting up. any input dismisses it with a fade. uses my own idle manager implementation.
 
 </details>
 
