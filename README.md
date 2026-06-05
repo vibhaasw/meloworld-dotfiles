@@ -205,7 +205,7 @@ chmod +x installer.sh
 dependencies
 
 ```bash
-paru -S mangowm quickshell pipewire pipewire-pulse wireplumber bluez bluez-utils brightnessctl kitty power-profiles-daemon ttf-jetbrains-mono-nerd grim slurp awww bibata-cursor-theme-bin papirus-icon-theme zed zsh zsh-autosuggestions zsh-syntax-highlighting adw-gtk-theme xdg-desktop-portal-wlr hypridle hyprlock cliphist wl-clipboard playerctl zoxide bat fd ripgrep lazygit switcheroo-control noto-fonts-emoji fzf zenity
+paru -S mangowm quickshell pipewire pipewire-pulse wireplumber bluez bluez-utils brightnessctl kitty power-profiles-daemon ttf-jetbrains-mono-nerd grim slurp awww bibata-cursor-theme-bin papirus-icon-theme zed zsh zsh-autosuggestions zsh-syntax-highlighting adw-gtk-theme xdg-desktop-portal-wlr cliphist wl-clipboard playerctl zoxide bat fd ripgrep lazygit switcheroo-control noto-fonts-emoji fzf zenity
 
 sudo systemctl enable --now bluetooth power-profiles-daemon switcheroo-control
 ```
@@ -217,7 +217,6 @@ cd meloworld-dotfiles
 cp -r quickshell ~/.config/
 cp -r mango ~/.config/
 cp -r kitty ~/.config/
-cp -r hypr ~/.config/
 cp -r vesktop ~/.config/
 cp -r zathura ~/.config/
 cp -r zed ~/.config/

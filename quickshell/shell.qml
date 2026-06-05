@@ -1,6 +1,8 @@
 //@ pragma IconTheme Papirus
 import QtQuick
 import Quickshell
+import Quickshell.Wayland
+import Quickshell.Io
 import "polkit"
 import "bar"
 import "notifications"
@@ -9,8 +11,32 @@ import "dashboard"
 import "dock"
 import "launcher"
 import "screenshot"
+import "theme"
 
 ShellRoot {
+    // ─── Idle overlay launcher ───
+    IdleMonitor {
+        id: idleMonitor
+        timeout: 360
+        enabled: !SystemTogglesState.caffeineOn
+
+        onIsIdleChanged: {
+            if (isIdle) {
+                idleOverlayProcess.running = true
+            }
+        }
+    }
+
+    Process {
+        id: idleOverlayProcess
+        command: ["qs", "-p", Quickshell.shellPath("idle-overlay")]
+        running: false
+
+        onExited: (exitCode, exitStatus) => {
+            running = false
+        }
+    }
+
     Variants {
         model: Quickshell.screens
         PanelWindow {
