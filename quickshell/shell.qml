@@ -17,12 +17,25 @@ ShellRoot {
     // ─── Idle overlay launcher ───
     IdleMonitor {
         id: idleMonitor
-        timeout: 360
+        timeout: 300
         enabled: !SystemTogglesState.caffeineOn
 
         onIsIdleChanged: {
             if (isIdle) {
                 idleOverlayProcess.running = true
+            }
+        }
+    }
+
+    // ─── Suspend ───
+    IdleMonitor {
+        id: suspendMonitor
+        timeout: 900
+        enabled: !SystemTogglesState.caffeineOn
+
+        onIsIdleChanged: {
+            if (isIdle) {
+                Quickshell.execDetached(["systemctl", "suspend"])
             }
         }
     }
