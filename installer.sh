@@ -108,7 +108,7 @@ if ask_permission "Install required packages?"; then
     zed zsh zsh-autosuggestions zsh-syntax-highlighting adw-gtk-theme zenity
     xdg-desktop-portal-wlr cliphist wl-clipboard playerctl
     zoxide bat fd fzf ripgrep lazygit noto-fonts-emoji switcheroo-control glow
-    unzip awww
+    unzip awww mpvpaper
   )
 
   info "Checking for missing packages..."

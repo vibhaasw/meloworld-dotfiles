@@ -40,10 +40,12 @@ PanelWindow {
                                           && !emojiMode && !hiddenMode
 
     property bool isGridView: false
+    property string wallpaperMediaFilter: "all"
     Settings {
         fileName: Quickshell.env("HOME") + "/.config/meloworld-dotfiles/settings.conf"
         category: "Launcher"
-        property alias isGridView: root.isGridView
+        property alias isGridView:           root.isGridView
+        property alias wallpaperMediaFilter: root.wallpaperMediaFilter
     }
 
     property int currentPage:  0
@@ -333,6 +335,11 @@ PanelWindow {
 
                 rightPillText: {
                     if (root.clipboardMode) return "󰩺"
+                    if (root.wallpaperMode) {
+                        if (root.wallpaperMediaFilter === "all")   return " ALL"
+                        if (root.wallpaperMediaFilter === "image") return " IMG"
+                        return " VID"
+                    }
                     if (root.appModeActive)
                         return root.isGridView ? "" : ""
                     return ""
@@ -341,6 +348,7 @@ PanelWindow {
                 rightPillDisabled:    root.clipboardMode && clipboardView.filteredClipboard.length === 0
                 rightPillTooltip: {
                     if (root.clipboardMode) return "Clear all clipboard history"
+                    if (root.wallpaperMode) return "Filter: ALL → IMG → VID"
                     if (root.appModeActive)
                         return root.isGridView ? "Switch to list view" : "Switch to grid view"
                     return ""
@@ -349,6 +357,10 @@ PanelWindow {
                 onRightPillClicked: {
                     if (root.clipboardMode) {
                         clipboardView.showDeleteAllConfirm()
+                    } else if (root.wallpaperMode) {
+                        if (root.wallpaperMediaFilter === "all")        root.wallpaperMediaFilter = "image"
+                        else if (root.wallpaperMediaFilter === "image") root.wallpaperMediaFilter = "video"
+                        else                                            root.wallpaperMediaFilter = "all"
                     } else {
                         root.animateWidth = true
                         root.isGridView   = !root.isGridView
@@ -473,6 +485,8 @@ PanelWindow {
             LauncherWallpaperView {
                 id:    wallpaperView
                 width: parent.width
+
+                mediaFilter: root.wallpaperMediaFilter
 
                 height:  root.wallpaperMode ? 660 : 0
                 clip:    true

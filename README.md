@@ -63,7 +63,7 @@ workspace pills slide in when you open something and slide out when you close it
 ![emoji](assets/emoji.png)
 ![wallpaper selector](assets/wallpaper-selector.png)
 
-a custom launcher built in quickshell, with modes. aimed to replace rofi for more flexibility. also supports switcheroo-control (like gnome and cosmic). you can switch between modes with the prefixes. /h for hidden apps, /w for wallpapers, /g for grid-list view switch. wallpapers are pulled from ~/Pictures/Wallpapers, just drop yours in.
+a custom launcher built in quickshell, with modes. aimed to replace rofi for more flexibility. also supports switcheroo-control (like gnome and cosmic). you can switch between modes with the prefixes. /h for hidden apps, /w for wallpapers, /g for grid-list view switch. wallpapers support animated wallpapers and are pulled from ~/Pictures/Wallpapers and ~/Videos/Wallpapers/, just drop yours in.
 
 </details>
 
@@ -205,7 +205,7 @@ chmod +x installer.sh
 dependencies
 
 ```bash
-paru -S mangowm quickshell pipewire pipewire-pulse wireplumber bluez bluez-utils brightnessctl kitty power-profiles-daemon ttf-jetbrains-mono-nerd grim slurp awww bibata-cursor-theme-bin papirus-icon-theme zed zsh zsh-autosuggestions zsh-syntax-highlighting adw-gtk-theme xdg-desktop-portal-wlr cliphist wl-clipboard playerctl zoxide bat fd ripgrep lazygit switcheroo-control noto-fonts-emoji fzf zenity
+paru -S mangowm quickshell pipewire pipewire-pulse wireplumber bluez bluez-utils brightnessctl kitty power-profiles-daemon ttf-jetbrains-mono-nerd grim slurp awww mpvpaper bibata-cursor-theme-bin papirus-icon-theme zed zsh zsh-autosuggestions zsh-syntax-highlighting adw-gtk-theme xdg-desktop-portal-wlr cliphist wl-clipboard playerctl zoxide bat fd ripgrep lazygit switcheroo-control noto-fonts-emoji fzf zenity
 
 sudo systemctl enable --now bluetooth power-profiles-daemon switcheroo-control
 ```

@@ -1,4 +1,9 @@
-// Self-contained wallpaper picker: loads, filters, and sets wallpapers.
+// Self-contained wallpaper picker: images/gifs (awww) + videos (mpvpaper).
+// Images dir : ~/Pictures/Wallpapers  (.jpg .jpeg .png .webp .gif .jxl .bmp .tiff .tga .webp .avif .pnm .farbfeld .svg)
+// Videos dir : ~/Videos/Wallpapers    (.mp4 .mkv .webm .mov .avi .flv .wmv .ts .m4v .ogv)
+// Thumbnails  : cached in ~/.cache/meloworld/wallpaper-thumbs/ via ffmpeg
+// Daemon      : awww-daemon (must be running); mpvpaper uses ALL output keyword
+
 import QtQuick
 import QtQuick.Controls
 import Quickshell
@@ -11,13 +16,16 @@ Item {
     // ── API ───────────────────────────────────────────────────────────────
     signal dismissed()
 
-    property var filteredWallpapers: []
+    property var    filteredWallpapers: []
+    // "all" | "image" | "video"
+    // "image" includes gifs; "video" is mpvpaper-handled files only.
+    property string mediaFilter: "all"
 
     function load() {
         wallpaperModel.clear()
         root.filteredWallpapers = []
-        wallpaperProc.running = false
-        wallpaperProc.running = true
+        scanProc.running = false
+        scanProc.running = true
     }
 
     function setFilter(query) {
@@ -33,7 +41,8 @@ Item {
     function navigateBacktab() { _move(-1, 0) }
     function confirm() {
         if (wallpaperGrid.currentIndex >= 0 && wallpaperGrid.currentIndex < root.filteredWallpapers.length) {
-            wallpaperSetProc.apply(root.filteredWallpapers[wallpaperGrid.currentIndex].filePath)
+            var entry = root.filteredWallpapers[wallpaperGrid.currentIndex]
+            wallpaperSetProc.apply(entry.filePath, entry.mediaType)
             root.dismissed()
         }
     }
@@ -41,80 +50,178 @@ Item {
     // ── Internal ──────────────────────────────────────────────────────────
     property string _query: ""
 
+    // Rerun filter whenever the media type toggle changes
+    onMediaFilterChanged: _applyFilter()
+
+    // Returns "gif" | "video" | "image"
+    function _mediaType(path) {
+        var ext = path.split(".").pop().toLowerCase()
+        if (ext === "gif") return "gif"
+        if (["mp4","mkv","webm","mov","avi","flv","wmv","ts","m4v","ogv"].indexOf(ext) !== -1) return "video"
+        return "image"
+    }
+
+    // Cache path mirrors the file path with slashes replaced by underscores.
+    function _thumbPath(filePath) {
+        var safe = filePath.replace(/\//g, "_").replace(/^_+/, "")
+        return Quickshell.env("HOME") + "/.cache/meloworld/wallpaper-thumbs/" + safe + ".jpg"
+    }
+
     function _applyFilter() {
         var q = _query.toLowerCase()
         var result = []
         for (var i = 0; i < wallpaperModel.count; i++) {
             var e = wallpaperModel.get(i)
+
+            // Media type filter: "image" matches image+gif, "video" matches video only
+            var typeMatch = root.mediaFilter === "all"
+                || (root.mediaFilter === "image" && e.mediaType !== "video")
+                || (root.mediaFilter === "video" && e.mediaType === "video")
+            if (!typeMatch) continue
+
             if (q === "" || e.wallName.toLowerCase().includes(q))
-                result.push({ filePath: e.filePath, wallName: e.wallName })
+                result.push({
+                    filePath:  e.filePath,
+                    wallName:  e.wallName,
+                    mediaType: e.mediaType,
+                    thumbPath: e.thumbPath
+                })
         }
         root.filteredWallpapers = result
-        wallpaperGrid.currentIndex = 0
+        wallpaperGrid.currentIndex = result.length > 0 ? 0 : -1
     }
 
     function _move(colDelta, rowDelta) {
         if (root.filteredWallpapers.length === 0) return
-        var cols    = wallpaperGrid.cols
-        var maxIdx  = root.filteredWallpapers.length - 1
-        var cur     = wallpaperGrid.currentIndex < 0 ? 0 : wallpaperGrid.currentIndex
-        var next    = Math.max(0, Math.min(cur + colDelta + rowDelta * cols, maxIdx))
+        var cols   = wallpaperGrid.cols
+        var maxIdx = root.filteredWallpapers.length - 1
+        var cur    = wallpaperGrid.currentIndex < 0 ? 0 : wallpaperGrid.currentIndex
+        var next   = Math.max(0, Math.min(cur + colDelta + rowDelta * cols, maxIdx))
         wallpaperGrid.currentIndex = next
         wallpaperGrid.positionViewAtIndex(next, GridView.Contain)
     }
 
-    // ── Wallpaper model + loader ──────────────────────────────────────────
-    ListModel { id: wallpaperModel }
-
+    // ── Step 1: scan both wallpaper dirs ──────────────────────────────────
     Process {
-        id: wallpaperProc
+        id: scanProc
         command: [
             "bash", "-c",
-            "find \"${WALLPAPER_DIR:-$HOME/Pictures/Wallpapers}\" " +
-            "\\( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' " +
-            "-o -iname '*.webp' -o -iname '*.gif' -o -iname '*.jxl' \\) " +
-            "-type f | sort"
+            // Images (awww-supported formats)
+            "find \"$HOME/Pictures/Wallpapers\" -type f \\( " +
+            "-iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.webp' " +
+            "-o -iname '*.gif' -o -iname '*.jxl' -o -iname '*.bmp' -o -iname '*.tiff' " +
+            "-o -iname '*.tga' -o -iname '*.avif' -o -iname '*.pnm' -o -iname '*.svg' \\) " +
+            "2>/dev/null | sort | sed 's/$/ IMAGE/'; " +
+            // Videos (mpvpaper/mpv-supported formats)
+            "find \"$HOME/Videos/Wallpapers\" -type f \\( " +
+            "-iname '*.mp4' -o -iname '*.mkv' -o -iname '*.webm' -o -iname '*.mov' " +
+            "-o -iname '*.avi' -o -iname '*.flv' -o -iname '*.wmv' " +
+            "-o -iname '*.ts' -o -iname '*.m4v' -o -iname '*.ogv' \\) " +
+            "2>/dev/null | sort | sed 's/$/ VIDEO/'"
         ]
         running: false
         stdout: StdioCollector {
             onStreamFinished: {
                 var lines = this.text.trim().split("\n")
                 wallpaperModel.clear()
+                var videoPaths = []
+
                 for (var i = 0; i < lines.length; i++) {
-                    var path = lines[i].trim()
-                    if (path === "") continue
-                    var base = path.split("/").pop()
-                    var name = base.replace(/\.[^/.]+$/, "")
-                    wallpaperModel.append({ filePath: path, wallName: name })
+                    var line = lines[i].trim()
+                    if (line === "") continue
+
+                    var lastSpace = line.lastIndexOf(" ")
+                    var path  = line.substring(0, lastSpace).trim()
+                    var base  = path.split("/").pop()
+                    var name  = base.replace(/\.[^/.]+$/, "")
+                    var mtype = root._mediaType(path)
+                    var thumb = (mtype === "video") ? root._thumbPath(path) : ""
+
+                    wallpaperModel.append({
+                        filePath:  path,
+                        wallName:  name,
+                        mediaType: mtype,
+                        thumbPath: thumb
+                    })
+
+                    if (mtype === "video") videoPaths.push(path)
                 }
+
+                if (videoPaths.length > 0) {
+                    thumbGenProc.generateAll(videoPaths)
+                } else {
+                    root._applyFilter()
+                }
+            }
+        }
+    }
+
+    // ── Step 2: generate missing video thumbnails (ffmpeg, cached) ────────
+    Process {
+        id: thumbGenProc
+        running: false
+
+        function generateAll(paths) {
+            var home     = Quickshell.env("HOME")
+            var cacheDir = home + "/.cache/meloworld/wallpaper-thumbs"
+            var cmds     = ["mkdir -p \"" + cacheDir + "\""]
+
+            for (var i = 0; i < paths.length; i++) {
+                var p     = paths[i].replace(/'/g, "'\\''")
+                var thumb = root._thumbPath(paths[i]).replace(/'/g, "'\\''")
+                // Skip generation if cache file already exists
+                cmds.push(
+                    "[ -f '" + thumb + "' ] || " +
+                    "ffmpeg -y -ss 00:00:01 -i '" + p + "' " +
+                    "-vframes 1 -vf 'scale=256:-1' -q:v 3 '" + thumb + "' " +
+                    ">/dev/null 2>&1"
+                )
+            }
+
+            thumbGenProc.command = ["bash", "-c", cmds.join("\n")]
+            thumbGenProc.running = false
+            thumbGenProc.running = true
+        }
+
+        stdout: StdioCollector {
+            onStreamFinished: {
                 root._applyFilter()
             }
         }
     }
 
-    // ── Wallpaper setter ──────────────────────────────────────────────────
+    // ── Step 3: apply wallpaper ───────────────────────────────────────────
     Process {
         id: wallpaperSetProc
         running: false
         command: ["true"]
-        function apply(path) {
+
+        function apply(path, mediaType) {
             var p = path.replace(/'/g, "'\\''")
-            wallpaperSetProc.command = [
-                "bash", "-c",
-                "if command -v awww >/dev/null 2>&1 && [ -n \"$WAYLAND_DISPLAY\" ]; then " +
-                "  awww query >/dev/null 2>&1 || awww init && " +
-                "  awww img '" + p + "' --transition-type fade --transition-duration 0.8 --transition-fps 60; " +
-                "elif command -v swaybg >/dev/null 2>&1; then " +
-                "  pkill swaybg 2>/dev/null; swaybg -m fill -i '" + p + "' & " +
-                "elif command -v feh >/dev/null 2>&1; then " +
-                "  feh --bg-scale '" + p + "'; " +
-                "fi; " +
-                "ln -sf '" + p + "' \"$HOME/.config/quickshell/lockscreen/wallpaper\""
-            ]
+            var script
+
+            if (mediaType === "video") {
+                script =
+                    "pkill -x awww-daemon 2>/dev/null; " +
+                    "pkill -x mpvpaper 2>/dev/null; " +
+                    "sleep 0.2; " +
+                    "mpvpaper -f -p -o 'loop no-audio' ALL '" + p + "'"
+            } else {
+                script =
+                    "pkill -x mpvpaper 2>/dev/null; " +
+                    "awww query >/dev/null 2>&1 || (awww-daemon & sleep 0.5); " +
+                    "awww img '" + p + "' --transition-type fade --transition-duration 0.8 --transition-fps 60; " +
+                    "ln -sf '" + p + "' \"$HOME/.config/quickshell/lockscreen/wallpaper\""
+            }
+
+            wallpaperSetProc.command = ["bash", "-c", script]
             wallpaperSetProc.running = false
             wallpaperSetProc.running = true
         }
     }
+
+    // ── Wallpaper model ───────────────────────────────────────────────────
+    ListModel { id: wallpaperModel }
 
     // ── Grid ─────────────────────────────────────────────────────────────
     GridView {
@@ -139,51 +246,92 @@ Item {
             width:  wallpaperGrid.cellWidth
             height: wallpaperGrid.cellHeight
 
+            readonly property bool isSelected: index === wallpaperGrid.currentIndex
+            readonly property bool isHovered:  tileHover.containsMouse
+
             Rectangle {
                 anchors { fill: parent; margins: 4 }
                 radius: 10
-                color:  tileHover.containsMouse || index === wallpaperGrid.currentIndex
-                            ? Qt.rgba(1, 1, 1, 0.10) : "transparent"
+                color:  isHovered || isSelected ? Qt.rgba(1, 1, 1, 0.10) : "transparent"
                 Behavior on color { ColorAnimation { duration: 120 } }
 
                 Column {
                     anchors { fill: parent; margins: 4 }
                     spacing: 6
 
+                    // ── Thumbnail ─────────────────────────────────────────
                     Item {
+                        id:     thumbItem
                         width:  parent.width
                         height: wallpaperGrid.thumbH - 8
 
+                        // Loading / missing placeholder
                         Rectangle {
-                            anchors.fill: parent; color: PanelColors.rowBackground
-                            radius: 8; visible: wallImg.status !== Image.Ready
+                            anchors.fill: parent
+                            color:        PanelColors.rowBackground
+                            radius:       8
+                            visible:      thumbImg.status !== Image.Ready
                         }
+
                         Image {
-                            id:              wallImg
+                            id:              thumbImg
                             anchors.fill:    parent
                             anchors.margins: 2
-                            source:          "file://" + modelData.filePath
-                            sourceSize:      Qt.size(256, 256)
+                            source:          modelData.mediaType === "video"
+                                                 ? ("file://" + modelData.thumbPath)
+                                                 : ("file://" + modelData.filePath)
+                            sourceSize:      Qt.size(256, 160)
                             fillMode:        Image.PreserveAspectCrop
-                            asynchronous:    true; cache: true; smooth: true; mipmap: true
+                            asynchronous:    true
+                            cache:           true
+                            smooth:          true
+                            mipmap:          true
                         }
+
+                        // Overlay border
                         Rectangle {
-                            anchors.fill: parent; color: "transparent"
-                            border.color: tileHover.containsMouse || index === wallpaperGrid.currentIndex
-                                              ? PanelColors.launcher : PanelColors.border
-                            border.width: 2; radius: 8
+                            anchors.fill: parent
+                            color:        "transparent"
+                            radius:       8
+                            border.color: isHovered || isSelected ? PanelColors.launcher : PanelColors.border
+                            border.width: 2
                             Behavior on border.color { ColorAnimation { duration: 120 } }
+                        }
+
+                        // ── Media badge (gif / video only) ────────────────
+                        Rectangle {
+                            visible: modelData.mediaType !== "image"
+                            anchors {
+                                right:   parent.right
+                                bottom:  parent.bottom
+                                margins: 6
+                            }
+                            width:  badgeLabel.implicitWidth + 10
+                            height: 20
+                            radius: 4
+                            color:  PanelColors.rowBackground
+
+                            Text {
+                                id:               badgeLabel
+                                anchors.centerIn: parent
+                                text:             modelData.mediaType === "gif" ? "󰵸 GIF" : "  VID"
+                                font.family:      "JetBrainsMono Nerd Font"
+                                font.pixelSize:   11
+                                font.bold:        true
+                                color:            modelData.mediaType === "gif" ? Colors.teal200 : Colors.green200
+                            }
                         }
                     }
 
+                    // ── Label ─────────────────────────────────────────────
                     Text {
                         width:               parent.width
                         height:              wallpaperGrid.labelH
                         text:                modelData.wallName
-                        font.pixelSize:      13; font.bold: true
+                        font.pixelSize:      13
+                        font.bold:           true
                         font.family:         "JetBrainsMono Nerd Font"
-                        color:               index === wallpaperGrid.currentIndex
-                                                 ? PanelColors.launcher : PanelColors.textMain
+                        color:               isSelected ? PanelColors.launcher : PanelColors.textMain
                         Behavior on color    { ColorAnimation { duration: 120 } }
                         horizontalAlignment: Text.AlignHCenter
                         verticalAlignment:   Text.AlignVCenter
@@ -194,9 +342,10 @@ Item {
                 MouseArea {
                     id:           tileHover
                     anchors.fill: parent
-                    hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                    hoverEnabled: true
+                    cursorShape:  Qt.PointingHandCursor
                     onClicked: {
-                        wallpaperSetProc.apply(modelData.filePath)
+                        wallpaperSetProc.apply(modelData.filePath, modelData.mediaType)
                         root.dismissed()
                     }
                 }
