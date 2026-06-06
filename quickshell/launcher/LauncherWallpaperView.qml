@@ -315,7 +315,7 @@ Item {
                             Text {
                                 id:               badgeLabel
                                 anchors.centerIn: parent
-                                text:             modelData.mediaType === "gif" ? "󰵸 GIF" : "  VID"
+                                text:             modelData.mediaType === "gif" ? "󰵸 GIF" : " VID"
                                 font.family:      "JetBrainsMono Nerd Font"
                                 font.pixelSize:   11
                                 font.bold:        true
