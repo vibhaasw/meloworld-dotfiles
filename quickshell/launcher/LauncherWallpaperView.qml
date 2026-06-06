@@ -2,7 +2,8 @@
 // Images dir : ~/Pictures/Wallpapers  (.jpg .jpeg .png .webp .gif .jxl .bmp .tiff .tga .webp .avif .pnm .farbfeld .svg)
 // Videos dir : ~/Videos/Wallpapers    (.mp4 .mkv .webm .mov .avi .flv .wmv .ts .m4v .ogv)
 // Thumbnails  : cached in ~/.cache/meloworld/wallpaper-thumbs/ via ffmpeg
-// Daemon      : awww-daemon (must be running); mpvpaper uses ALL output keyword
+// Daemon      : awww-daemon for images/gifs; mpvpaper for videos (ALL outputs)
+// State       : last wallpaper persisted to ~/.cache/meloworld/last-wallpaper for restore on login
 
 import QtQuick
 import QtQuick.Controls
@@ -204,13 +205,17 @@ Item {
                 script =
                     "pkill -x awww-daemon 2>/dev/null; " +
                     "pkill -x mpvpaper 2>/dev/null; " +
-                    "sleep 0.2; " +
-                    "mpvpaper -f -p -o 'loop no-audio' ALL '" + p + "'"
+                    "while pgrep -x 'mpvpaper|awww-daemon' > /dev/null; do sleep 0.05; done; " +
+                    "mkdir -p \"$HOME/.cache/meloworld\"; " +
+                    "echo 'video:" + p + "' > \"$HOME/.cache/meloworld/last-wallpaper\"; " +
+                    "mpvpaper -f -p -o '--loop-file=inf --no-audio --hwdec=auto' ALL '" + p + "'"
             } else {
                 script =
                     "pkill -x mpvpaper 2>/dev/null; " +
                     "awww query >/dev/null 2>&1 || { awww-daemon &>/dev/null & " +
                     "for i in $(seq 1 20); do sleep 0.1 && awww query >/dev/null 2>&1 && break; done; }; " +
+                    "mkdir -p \"$HOME/.cache/meloworld\"; " +
+                    "echo 'image:" + p + "' > \"$HOME/.cache/meloworld/last-wallpaper\"; " +
                     "awww img '" + p + "' --transition-type fade --transition-duration 0.8 --transition-fps 60; " +
                     "ln -sf '" + p + "' \"$HOME/.config/quickshell/lockscreen/wallpaper\""
             }
