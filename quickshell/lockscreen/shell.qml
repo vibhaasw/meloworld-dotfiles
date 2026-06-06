@@ -108,7 +108,7 @@ ShellRoot {
                     // Wallpaper
                     Image {
                         anchors.fill: parent
-                        source: Qt.resolvedUrl("wallpaper")
+                        source: "file://" + Quickshell.env("HOME") + "/.config/quickshell/lockscreen/wallpaper.png"
                         fillMode: Image.PreserveAspectCrop
                         asynchronous: true
                         visible: status === Image.Ready

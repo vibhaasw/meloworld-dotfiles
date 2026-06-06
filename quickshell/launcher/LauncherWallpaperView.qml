@@ -198,7 +198,8 @@ Item {
         command: ["true"]
 
         function apply(path, mediaType) {
-            var p = path.replace(/'/g, "'\\''")
+            var p    = path.replace(/'/g, "'\\''")
+            var lock = "\"$HOME/.config/quickshell/lockscreen/wallpaper.png\""
             var script
 
             if (mediaType === "video") {
@@ -208,6 +209,8 @@ Item {
                     "while pgrep -x 'mpvpaper|awww-daemon' > /dev/null; do sleep 0.05; done; " +
                     "mkdir -p \"$HOME/.cache/meloworld\"; " +
                     "echo 'video:" + p + "' > \"$HOME/.cache/meloworld/last-wallpaper\"; " +
+                    // Extract frame at 1s → lockscreen wallpaper (runs in background, non-blocking)
+                    "ffmpeg -y -ss 00:00:01 -i '" + p + "' -vframes 1 " + lock + " >/dev/null 2>&1 & " +
                     "mpvpaper -f -p -o '--loop-file=inf --no-audio --hwdec=auto' ALL '" + p + "'"
             } else {
                 script =
@@ -217,7 +220,9 @@ Item {
                     "mkdir -p \"$HOME/.cache/meloworld\"; " +
                     "echo 'image:" + p + "' > \"$HOME/.cache/meloworld/last-wallpaper\"; " +
                     "awww img '" + p + "' --transition-type fade --transition-duration 0.8 --transition-fps 60; " +
-                    "ln -sf '" + p + "' \"$HOME/.config/quickshell/lockscreen/wallpaper\""
+                    // Copy image to a consistent path the lockscreen always reads
+                    "cp -f '" + p + "' " + lock
+
             }
 
             wallpaperSetProc.command = ["bash", "-c", script]
