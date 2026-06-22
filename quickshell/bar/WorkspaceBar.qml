@@ -1,6 +1,5 @@
 import QtQuick
 import Quickshell
-import Quickshell.Hyprland
 import Quickshell.Io
 import "../theme"
 
@@ -8,123 +7,153 @@ Row {
     id: root
     spacing: 4
 
-    // ── Backend detection ─────────────────────────────────────────────────────
-    // Hyprland.requestSocketPath is an empty string when not running under
-    // Hyprland. This is synchronous, deterministic, and has no race condition.
-    readonly property bool isHyprland: Hyprland.requestSocketPath !== ""
-
-    // ── Shared visual state ───────────────────────────────────────────────────
+    // ── State (9 slots, index = workspaceIdx - 1) ─────────────────────────
     property var tagFocused: [false, false, false, false, false, false, false, false, false]
-    property var tagClients: [0, 0, 0, 0, 0, 0, 0, 0, 0]
+    property var tagClients: [0,     0,     0,     0,     0,     0,     0,     0,     0    ]
     property int focusedTag: 1
     property bool canScroll: true
 
-    // ── Hyprland: reactive state ──────────────────────────────────────────────
-    // Both workspace-list changes (open/close window) and focusedWorkspace
-    // changes (switch workspace) are caught here.
-    // toplevels.values.length is a live ObjectModel count — no lastIpcObject.
-    Connections {
-        target: Hyprland
-        enabled: root.isHyprland
+    // Internal lookup tables
+    // workspaceIndexMap:  { workspaceId → idx (1-based) }
+    // windowWorkspaceMap: { windowId   → workspaceId }
+    property var workspaceIndexMap: ({})
+    property var windowWorkspaceMap: ({})
 
-        function onWorkspacesChanged()       { root._syncHyprland() }
-        function onFocusedWorkspaceChanged() { root._syncHyprland() }
-    }
+    // ── Niri event stream socket (read-only after EventStream) ────────────
+    // After sending "EventStream", niri stops reading this socket entirely.
+    // All actions MUST go through a separate process (niri msg).
+    Socket {
+        id: eventSocket
 
-    function _syncHyprland() {
-        var f       = [false, false, false, false, false, false, false, false, false]
-        var c       = [0,     0,     0,     0,     0,     0,     0,     0,     0    ]
-        var focused = 1
+        readonly property string socketPath: Quickshell.env("NIRI_SOCKET")
 
-        var wsList = Hyprland.workspaces.values
-        for (var i = 0; i < wsList.length; i++) {
-            var ws = wsList[i]
-            if (ws.id < 1 || ws.id > 9) continue   // skip named/special workspaces
-            var idx = ws.id - 1
-            f[idx] = ws.focused || ws.active
-            c[idx] = ws.toplevels.values.length     // live count, always accurate
-            if (ws.focused) focused = ws.id
-        }
+        path: socketPath
+        connected: socketPath !== ""
 
-        root.tagFocused = f
-        root.tagClients = c
-        root.focusedTag = focused
-    }
-
-    // Also react to toplevel changes on individual workspaces.
-    // We do this by watching the global Hyprland.toplevels ObjectModel —
-    // it fires when any window is added or removed anywhere, which is exactly
-    // when we need to re-run _syncHyprland. This avoids the broken pattern of
-    // Connections { target: Hyprland.focusedWorkspace } which does NOT rebind
-    // when focusedWorkspace itself changes.
-    Connections {
-        target: Hyprland.toplevels
-        enabled: root.isHyprland
-        function onObjectInsertedPost() { root._syncHyprland() }
-        function onObjectRemovedPost()  { root._syncHyprland() }
-    }
-
-    // ── MangoWM: process-based backend (original, unchanged) ──────────────────
-    function parseLine(line) {
-        var trimmed = line.trim()
-        if (trimmed.length === 0) return
-        try {
-            var json     = JSON.parse(trimmed)
-            var monitors = json["all_tags"]
-            if (!monitors || monitors.length === 0) return
-            var tags = monitors[0]["tags"]
-            if (!tags) return
-
-            var f       = [false, false, false, false, false, false, false, false, false]
-            var c       = [0, 0, 0, 0, 0, 0, 0, 0, 0]
-            var focused = 1
-
-            for (var i = 0; i < tags.length; i++) {
-                var tag = tags[i]
-                var idx = tag["index"] - 1
-                if (idx < 0 || idx >= 9) continue
-                f[idx] = tag["is_active"] === true
-                c[idx] = tag["client_count"] || 0
-                if (f[idx]) focused = tag["index"]
+        onConnectedChanged: {
+            if (connected) {
+                eventSocket.write('"EventStream"\n')
+            } else {
+                eventReconnectTimer.start()
             }
-
-            root.tagFocused = f
-            root.tagClients = c
-            root.focusedTag = focused
-        } catch (e) {
-            console.warn("WorkspaceBar parse error:", e, trimmed)
         }
-    }
 
-    Process {
-        id: initProc
-        command: ["mmsg", "get", "all-tags"]
-        running: !root.isHyprland
-        stdout: SplitParser { onRead: (line) => root.parseLine(line) }
-    }
-
-    Process {
-        id: watchProc
-        command: ["mmsg", "watch", "all-tags"]
-        running: !root.isHyprland
-        onRunningChanged: if (!running && !root.isHyprland) watchRestartTimer.start()
-        stdout: SplitParser { onRead: (line) => root.parseLine(line) }
+        parser: SplitParser {
+            onRead: (line) => {
+                const trimmed = line.trim()
+                if (trimmed.length === 0) return
+                try {
+                    root.handleNiriEvent(JSON.parse(trimmed))
+                } catch (e) {
+                    console.warn("WorkspaceBar: JSON parse error:", e, "raw:", trimmed)
+                }
+            }
+        }
     }
 
     Timer {
-        id: watchRestartTimer
+        id: eventReconnectTimer
         interval: 1000
-        onTriggered: if (!root.isHyprland) watchProc.running = true
+        onTriggered: eventSocket.connected = eventSocket.socketPath !== ""
     }
 
-    // ── Scroll throttle (shared) ──────────────────────────────────────────────
+    // ── Action: focus workspace by 1-based index ──────────────────────────
+    // Correct CLI syntax: niri msg action focus-workspace N  (no --index flag)
+    function focusWorkspaceByIndex(idx) {
+        Quickshell.execDetached(["niri", "msg", "action", "focus-workspace", String(idx)])
+    }
+
+    // ── Event handler ─────────────────────────────────────────────────────
+    function handleNiriEvent(ev) {
+        if (ev["WorkspacesChanged"] !== undefined) {
+            _rebuildWorkspaces(ev["WorkspacesChanged"]["workspaces"])
+
+        } else if (ev["WorkspaceActivated"] !== undefined) {
+            const data = ev["WorkspaceActivated"]
+            if (data["focused"]) {
+                const idx = root.workspaceIndexMap[data["id"]]
+                if (idx !== undefined) {
+                    root.focusedTag = idx
+                    _recomputeFocused()
+                }
+            }
+
+        } else if (ev["WindowsChanged"] !== undefined) {
+            _rebuildWindows(ev["WindowsChanged"]["windows"])
+
+        } else if (ev["WindowOpenedOrChanged"] !== undefined) {
+            const w = ev["WindowOpenedOrChanged"]["window"]
+            if (w["workspace_id"] !== undefined) {
+                const map = Object.assign({}, root.windowWorkspaceMap)
+                map[w["id"]] = w["workspace_id"]
+                root.windowWorkspaceMap = map
+                _recomputeClients()
+            }
+
+        } else if (ev["WindowClosed"] !== undefined) {
+            const map = Object.assign({}, root.windowWorkspaceMap)
+            delete map[ev["WindowClosed"]["id"]]
+            root.windowWorkspaceMap = map
+            _recomputeClients()
+        }
+    }
+
+    function _rebuildWorkspaces(workspaces) {
+        const indexMap = {}
+        let focused = root.focusedTag
+
+        for (let i = 0; i < workspaces.length; i++) {
+            const ws = workspaces[i]
+            const idx = ws["idx"]
+            if (idx === undefined || idx < 1 || idx > 9) continue
+            indexMap[ws["id"]] = idx
+            if (ws["is_focused"]) focused = idx
+        }
+
+        root.workspaceIndexMap = indexMap
+        root.focusedTag = focused
+        _recomputeFocused()
+        _recomputeClients()
+    }
+
+    function _rebuildWindows(windows) {
+        const map = {}
+        for (let i = 0; i < windows.length; i++) {
+            const w = windows[i]
+            if (w["workspace_id"] !== undefined)
+                map[w["id"]] = w["workspace_id"]
+        }
+        root.windowWorkspaceMap = map
+        _recomputeClients()
+    }
+
+    function _recomputeFocused() {
+        const f = [false, false, false, false, false, false, false, false, false]
+        const focused = root.focusedTag
+        if (focused >= 1 && focused <= 9) f[focused - 1] = true
+        root.tagFocused = f
+    }
+
+    function _recomputeClients() {
+        const c        = [0, 0, 0, 0, 0, 0, 0, 0, 0]
+        const indexMap = root.workspaceIndexMap
+        const winMap   = root.windowWorkspaceMap
+        for (const wid in winMap) {
+            const wsId = winMap[wid]
+            const idx  = indexMap[wsId]
+            if (idx >= 1 && idx <= 9) c[idx - 1]++
+        }
+        root.tagClients = c
+    }
+
+    // ── Scroll throttle ───────────────────────────────────────────────────
     Timer {
         id: scrollThrottle
         interval: 30
         onTriggered: root.canScroll = true
     }
 
-    // ── Delegates ─────────────────────────────────────────────────────────────
+    // ── Delegates ─────────────────────────────────────────────────────────
     Repeater {
         model: 9
         delegate: Rectangle {
@@ -175,47 +204,24 @@ Row {
                 onEntered: pill.hovered = true
                 onExited:  pill.hovered = false
 
-                onClicked: {
-                    if (root.isHyprland) {
-                        var ws = Hyprland.workspaces.values.find(w => w.id === pill.tagNum)
-                        if (ws) ws.activate()
-                        else Hyprland.dispatch("workspace " + pill.tagNum)
-                    } else {
-                        Quickshell.execDetached(["mmsg", "dispatch", "view," + pill.tagNum])
-                    }
-                }
+                onClicked: root.focusWorkspaceByIndex(pill.tagNum)
 
                 onWheel: (event) => {
                     if (!root.canScroll) return
 
-                    if (root.isHyprland) {
-                        // Build sorted list of populated workspace ids (1–9 only)
-                        var ids = []
-                        var wsList = Hyprland.workspaces.values
-                        for (var i = 0; i < wsList.length; i++) {
-                            var ws = wsList[i]
-                            if (ws.id >= 1 && ws.id <= 9) ids.push(ws.id)
-                        }
-                        // ObjectModel is already sorted by id per the docs
-                        var idx = ids.indexOf(root.focusedTag)
-                        if (idx === -1) idx = 0
-                        idx = event.angleDelta.y < 0
-                            ? Math.min(idx + 1, ids.length - 1)
-                            : Math.max(idx - 1, 0)
-                        Hyprland.dispatch("workspace " + ids[idx])
-                    } else {
-                        var visible = []
-                        for (var i = 0; i < 9; i++) {
-                            if (root.tagFocused[i] || root.tagClients[i] > 0)
-                                visible.push(i + 1)
-                        }
-                        if (visible.length === 0) return
-                        var idx = visible.indexOf(root.focusedTag)
-                        idx = event.angleDelta.y < 0
-                            ? Math.min(idx + 1, visible.length - 1)
-                            : Math.max(idx - 1, 0)
-                        Quickshell.execDetached(["mmsg", "dispatch", "view," + visible[idx]])
+                    const visible = []
+                    for (let i = 0; i < 9; i++) {
+                        if (root.tagFocused[i] || root.tagClients[i] > 0)
+                            visible.push(i + 1)
                     }
+                    if (visible.length === 0) return
+
+                    let idx = visible.indexOf(root.focusedTag)
+                    if (idx === -1) idx = 0
+                    idx = event.angleDelta.y < 0
+                        ? Math.min(idx + 1, visible.length - 1)
+                        : Math.max(idx - 1, 0)
+                    root.focusWorkspaceByIndex(visible[idx])
 
                     root.canScroll = false
                     scrollThrottle.start()

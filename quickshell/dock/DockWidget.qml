@@ -3,7 +3,6 @@ import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
-import Quickshell.Hyprland
 import "."
 import "../theme"
 
@@ -27,54 +26,140 @@ PanelWindow {
         item: dockVisible ? pill : triggerStrip
     }
 
-    // ── Backend detection ──────────────────────────────────────────────────
-    readonly property bool isHyprland: Hyprland.requestSocketPath !== ""
+    // ── State ──────────────────────────────────────────────────────────────
+    property bool hovering:    false
+    property bool anyMenuOpen: false
 
-    // ── state ──────────────────────────────────────────────────────
-    property bool mangoWindowsPresent: false
-    property bool hovering:       false
-    property bool anyMenuOpen:    false
+    readonly property bool dockVisible: !windowsPresent || hovering || anyMenuOpen
 
-    readonly property bool hyprWindowsPresent: {
-        if (!dock.isHyprland || !Hyprland.focusedWorkspace) return false
-        var tops = Hyprland.focusedWorkspace.toplevels
-        if (tops) {
-            if (tops.values !== undefined) return tops.values.length > 0
-            if (tops.count !== undefined) return tops.count > 0
+    // ── Niri IPC: track windows on the focused workspace ──────────────────
+    //
+    // Strategy: open a persistent Socket to $NIRI_SOCKET, subscribe to the
+    // event stream, and maintain two JS objects as lookup tables:
+    //   focusedWorkspaceId  — the ID of the currently focused workspace
+    //   windowWorkspaceMap  — { windowId: workspaceId } for all open windows
+    //
+    // windowsPresent becomes true when at least one entry in windowWorkspaceMap
+    // has a workspaceId matching focusedWorkspaceId.
+    //
+    // The event stream sends the full current state as the first batch of
+    // events on connect, so there is no need for a separate query.
+
+    property int    focusedWorkspaceId: -1
+    property var    windowWorkspaceMap: ({})
+
+    readonly property bool windowsPresent: {
+        const id = dock.focusedWorkspaceId
+        if (id < 0) return false
+        const map = dock.windowWorkspaceMap
+        for (const wid in map) {
+            if (map[wid] === id) return true
         }
         return false
     }
 
-    readonly property bool windowsPresent: dock.isHyprland ? dock.hyprWindowsPresent : dock.mangoWindowsPresent
-    readonly property bool dockVisible: !windowsPresent || hovering || anyMenuOpen
+    Socket {
+        id: niriSocket
 
-    Connections {
-        target: Hyprland
-        enabled: dock.isHyprland
+        // $NIRI_SOCKET is set by niri in every process it launches.
+        readonly property string socketPath: Quickshell.env("NIRI_SOCKET")
 
-        function onRawEvent(arg1, arg2) {
-            const eventName = typeof arg1 === "string" ? arg1 : (arg1.name || "")
-            const relevant = ["openwindow", "closewindow", "movewindow", "workspace", "focusedmon"]
-            if (relevant.indexOf(eventName) !== -1) {
-                Hyprland.refreshWorkspaces()
-                Hyprland.refreshToplevels()
+        path: socketPath
+        connected: socketPath !== ""
+
+        // As soon as the connection is established, subscribe to the event stream.
+        onConnectedChanged: {
+            if (connected) {
+                niriSocket.write('"EventStream"\n')
+            } else {
+                // Socket dropped — retry after a short delay.
+                reconnectTimer.start()
             }
         }
 
-        function onFocusedWorkspaceChanged() {
-            Hyprland.refreshWorkspaces()
-            Hyprland.refreshToplevels()
+        parser: SplitParser {
+            onRead: (line) => {
+                const trimmed = line.trim()
+                if (trimmed.length === 0) return
+                try {
+                    dock.handleNiriEvent(JSON.parse(trimmed))
+                } catch (e) {
+                    console.warn("DockWidget: JSON parse error:", e, "raw:", trimmed)
+                }
+            }
         }
     }
 
-    // ── hide debounce ──────────────────────────────────────────────
+    Timer {
+        id: reconnectTimer
+        interval: 1000
+        onTriggered: niriSocket.connected = niriSocket.socketPath !== ""
+    }
+
+    function handleNiriEvent(ev) {
+        // Each niri event is a JSON object with a single top-level key
+        // naming the event type.  Examples:
+        //   {"WorkspacesChanged":{"workspaces":[...]}}
+        //   {"WorkspaceActivated":{"id":3,"focused":true}}
+        //   {"WindowsChanged":{"windows":[...]}}
+        //   {"WindowOpenedOrChanged":{"window":{...}}}
+        //   {"WindowClosed":{"id":42}}
+
+        if (ev["WorkspacesChanged"] !== undefined) {
+            // Full workspace list — find the one that is both active and focused.
+            const ws = ev["WorkspacesChanged"]["workspaces"]
+            for (let i = 0; i < ws.length; i++) {
+                if (ws[i]["is_focused"]) {
+                    dock.focusedWorkspaceId = ws[i]["id"]
+                    break
+                }
+            }
+
+        } else if (ev["WorkspaceActivated"] !== undefined) {
+            // Incremental update — only update if this workspace gained focus.
+            const data = ev["WorkspaceActivated"]
+            if (data["focused"]) {
+                dock.focusedWorkspaceId = data["id"]
+            }
+
+        } else if (ev["WindowsChanged"] !== undefined) {
+            // Full window list — rebuild the map from scratch.
+            const wins = ev["WindowsChanged"]["windows"]
+            const map = {}
+            for (let i = 0; i < wins.length; i++) {
+                const w = wins[i]
+                if (w["workspace_id"] !== undefined) {
+                    map[w["id"]] = w["workspace_id"]
+                }
+            }
+            dock.windowWorkspaceMap = map
+
+        } else if (ev["WindowOpenedOrChanged"] !== undefined) {
+            // A single window was opened or moved — surgical map update.
+            const w = ev["WindowOpenedOrChanged"]["window"]
+            if (w["workspace_id"] !== undefined) {
+                const map = Object.assign({}, dock.windowWorkspaceMap)
+                map[w["id"]] = w["workspace_id"]
+                dock.windowWorkspaceMap = map
+            }
+
+        } else if (ev["WindowClosed"] !== undefined) {
+            // A window was closed — remove it from the map.
+            const id = ev["WindowClosed"]["id"]
+            const map = Object.assign({}, dock.windowWorkspaceMap)
+            delete map[id]
+            dock.windowWorkspaceMap = map
+        }
+    }
+
+    // ── Hide debounce ──────────────────────────────────────────────────────
     Timer {
         id: hideTimer
         interval: 300
         onTriggered: dock.hovering = false
     }
 
-    // ── trigger strip ──────────────────────────────────────────────
+    // ── Trigger strip ──────────────────────────────────────────────────────
     Item {
         id: triggerStrip
         anchors.left:   parent.left
@@ -90,37 +175,7 @@ PanelWindow {
         }
     }
 
-    // ── watch all-tags: hide when active tag has clients ───────────
-    Process {
-        id: watchTagsProc
-        command: ["mmsg", "watch", "all-tags"]
-        running: !dock.isHyprland
-        onRunningChanged: if (!running && !dock.isHyprland) tagsRestartTimer.start()
-        stdout: SplitParser {
-            onRead: (line) => {
-                var trimmed = line.trim()
-                if (trimmed.length === 0) return
-                try {
-                    var json = JSON.parse(trimmed)
-                    var monitors = json["all_tags"] || []
-                    if (monitors.length === 0) return
-                    var tags = monitors[0]["tags"] || []
-                    var active = tags.find(t => t["is_active"])
-                    if (active) dock.mangoWindowsPresent = active["client_count"] > 0
-                } catch (e) {
-                    console.warn("DockWidget parse error:", e)
-                }
-            }
-        }
-    }
-
-    Timer {
-        id: tagsRestartTimer
-        interval: 1000
-        onTriggered: watchTagsProc.running = true
-    }
-
-    // ── pill ───────────────────────────────────────────────────────
+    // ── Pill ───────────────────────────────────────────────────────────────
     Item {
         id: pill
 

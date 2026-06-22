@@ -150,13 +150,8 @@ PopupBase {
                             SessionState.hide()
                             if      (root.menuState === "confirm_shutdown") Quickshell.execDetached(["systemctl", "poweroff"])
                             else if (root.menuState === "confirm_reboot")   Quickshell.execDetached(["systemctl", "reboot"])
-                            else if (root.menuState === "confirm_logout") {
-                                const desktop = Quickshell.env("XDG_CURRENT_DESKTOP") ?? ""
-                                if (desktop.toLowerCase() === "hyprland")
-                                    Quickshell.execDetached(["sh", "-c", "command -v hyprshutdown >/dev/null 2>&1 && hyprshutdown || hyprctl dispatch 'hl.dsp.exit()'"])
-                                else
-                                    Quickshell.execDetached(["mmsg", "dispatch", "quit"])
-                            }
+                            else if (root.menuState === "confirm_logout")
+                                Quickshell.execDetached(["niri", "msg", "action", "quit", "--skip-confirmation"])
                         }
                     }
                 }
