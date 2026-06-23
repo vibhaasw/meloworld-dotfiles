@@ -4,9 +4,7 @@
 
 window-rule {
     draw-border-with-background false
-    background-effect{
-        blur true
-    }
+    // background-effect { blur true; }
 }
 
 // ---- Blurred apps --------------------------------------------------------
