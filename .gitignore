@@ -1,10 +1,11 @@
 # ignore the avatar in the quickshell config subfolder
 quickshell/avatar.png
+
 # ignore the lockscreen wallpaper since its symlinked anyways
 quickshell/lockscreen/wallpaper
 quickshell/lockscreen/wallpaper.png
-# switched to hyprland :3
-mango
+
 # please dont push this, this can contain your api keys if you are using ai features
 zed/settings.json
+    
 vesktop/
