@@ -4,7 +4,7 @@ screenshot-path "~/Pictures/Screenshots/Screenshot from %Y-%m-%d %H-%M-%S.png"
 
 environment {
     QT_QPA_PLATFORM "wayland"
-    DISPLAY null
+    // DISPLAY null
 }
 
 cursor {
