@@ -25,4 +25,3 @@ spawn-sh-at-startup "~/.local/bin/nightlight.sh"
 
 // Idle/lock daemon
 spawn-at-startup "swayidle" "-w"
-

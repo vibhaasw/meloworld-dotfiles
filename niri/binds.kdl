@@ -1,17 +1,14 @@
 // ════════════════════════════════════════════════════════════════════════════
 // Binds — meloworld / niri
 //
-// Philosophy, not muscle memory:
-//   Mod              → focus / navigate      (cheapest tier, used constantly)
-//   Mod+Shift         → move things           (columns, windows, workspaces)
+//   Mod               → focus / navigate       (root key, used constantly)
+//   Mod+Shift         → move things            (columns, windows, workspaces)
 //   Mod+Ctrl          → monitors               (focus / move across monitors)
 //   Mod+Alt           → layout & sizing        (resize, presets, maximize, tabs)
 //   Mod+Shift+Ctrl    → move column/window across monitors (rare, so 3 mods is fine)
 //
-// H/J/K/L are mirrored onto every directional bind, vim-style, same as your
-// old Mango config and as niri's own defaults already do.
+// H/J/K/L are mirrored onto every directional bind, vim-style.
 //
-// Every action name below is taken verbatim from niri's resources/default-config.kdl.
 // ════════════════════════════════════════════════════════════════════════════
 
 binds {

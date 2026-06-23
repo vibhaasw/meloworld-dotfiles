@@ -377,6 +377,12 @@ PanelWindow {
                             wallpaperView.load()
                             return
                         }
+                        if (t === "/c") {
+                            root._switchMode(false, true, false, false)
+                            searchBar.clear()
+                            clipboardView.load()
+                            return
+                        }
                         if (t === "/h") {
                             root._switchMode(false, false, false, true)
                             searchBar.clear()
