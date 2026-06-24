@@ -34,14 +34,10 @@ Singleton {
 
     function _defaults() {
         return [
-            { id: "ghostty",            label: "Ghostty",       icon: "com.mitchellh.ghostty",  execName: "",          steamId: "" },
-            { id: "zen",                label: "Zen",           icon: "zen-browser",            execName: "zen-browser", steamId: "" },
-            { id: "zeditor",            label: "Zed",           icon: "zed",                    execName: "",          steamId: "" },
-            { id: "spotify-launcher",   label: "Spotify",       icon: "spotify",                execName: "",          steamId: "" },
-            { id: "bitwig-studio",      label: "Bitwig Studio", icon: "bitwig-studio",          execName: "",          steamId: "" },
-            { id: "blender",            label: "Blender",       icon: "blender",                execName: "",          steamId: "" },
-            { id: "steam_app_431730",   label: "Aseprite",      icon: "steam_icon_431730",      execName: "",          steamId: "431730" },
-            { id: "org.gnome.Nautilus", label: "Files",         icon: "system-file-manager",    execName: "nautilus",  steamId: "" }
+            { id: "kitty",              label: "kitty", icon: "kitty",               execName: "",         steamId: "" },
+            { id: "org.gnome.Nautilus", label: "Files", icon: "system-file-manager", execName: "nautilus", steamId: "" }
+            // steam app example
+            // { id: "steam_app_431730",   label: "Aseprite",      icon: "steam_icon_431730",      execName: "",          steamId: "431730" },
         ]
     }
 
