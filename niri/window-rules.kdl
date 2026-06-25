@@ -73,9 +73,10 @@ window-rule {
     open-floating true
 }
 
-// ---- Spotify: tiles normally, nothing special, but documented for clarity
+// ---- Spotify: always float ------------------------------------------------
 window-rule {
     match app-id="^[Ss]potify$"
+    open-floating true
 }
 
 // ---- WezTerm initial-configure workaround (kept from upstream default) ---
@@ -121,4 +122,10 @@ window-rule {
             blur true
         }
     }
+}
+
+// ---- Steam notification fix from the niri wiki ----------------------------
+window-rule {
+    match app-id="steam" title=r#"^notificationtoasts_\d+_desktop$"#
+    default-floating-position x=10 y=10 relative-to="bottom-right"
 }
