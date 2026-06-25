@@ -127,13 +127,7 @@ prepend_keymap = [
 [input]
 prepend_keymap = [
   # Readline-style kills in insert mode
-  { on = "<C-u>", run = "kill bol", desc = "Kill to beginning of line" },
-  { on = "<C-k>", run = "kill eol", desc = "Kill to end of line" },
-  { on = "<C-w>", run = "kill backward", desc = "Kill word backward" },
   { on = "<A-d>", run = "kill forward", desc = "Kill word forward" },
-  # Fast word jump
-  { on = "<A-b>", run = "backward", desc = "Move word backward" },
-  { on = "<A-f>", run = "forward", desc = "Move word forward" },
 ]
 
 # ══════════════════════════════════════════════════════════════════════════
