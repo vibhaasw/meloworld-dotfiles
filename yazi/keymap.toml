@@ -15,18 +15,6 @@ prepend_keymap = [
   # ── Navigation bookmarks (g-prefix) ─────────────────────────────────
   { on = [
     "g",
-    "h",
-  ], run = "cd ~", desc = "Go ~/", for = "unix" },
-  { on = [
-    "g",
-    "c",
-  ], run = "cd ~/.config", desc = "Go ~/.config", for = "unix" },
-  { on = [
-    "g",
-    "d",
-  ], run = "cd ~/Downloads", desc = "Go ~/Downloads", for = "unix" },
-  { on = [
-    "g",
     "m",
   ], run = "cd ~/Music", desc = "Go ~/Music", for = "unix" },
   { on = [
@@ -39,7 +27,7 @@ prepend_keymap = [
   ], run = "cd ~/Documents", desc = "Go ~/Documents", for = "unix" },
   { on = [
     "g",
-    "r",
+    "P",
   ], run = "cd ~/Projects", desc = "Go ~/Projects", for = "unix" },
   { on = [
     "g",
