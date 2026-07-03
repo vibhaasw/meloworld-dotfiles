@@ -185,8 +185,7 @@ binds {
     Mod+Q repeat=false { close-window; }
 
     // ════════════════════════════════════════════════════════════════════════
-    // Hardware keys — verbatim from your Mango config, same tools (wpctl,
-    // playerctl, brightnessctl), allow-when-locked so they work on the
+    // Hardware keys, allow-when-locked so they work on the
     // lockscreen too.
     // ════════════════════════════════════════════════════════════════════════
 

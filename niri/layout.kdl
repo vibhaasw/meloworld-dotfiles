@@ -3,7 +3,7 @@ layout {
     center-focused-column "on-overflow"
     always-center-single-column
     // empty-workspace-above-first
-    default-column-display "tabbed"
+    default-column-display "normal"
     background-color "#212121"
 
     // Column widths that Mod+R cycles through. Tuned for actual

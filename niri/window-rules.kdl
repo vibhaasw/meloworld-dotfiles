@@ -29,6 +29,13 @@ window-rule {
     }
 }
 
+window-rule {
+    match app-id="linux-wallpaperengine-gui"
+    background-effect {
+        blur true
+    }
+}
+
 // ---- Picture-in-picture: always floats, small, corner-anchored -----------
 window-rule {
     match app-id="firefox$" title="^Picture-in-Picture$"
